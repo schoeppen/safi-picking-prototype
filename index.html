@@ -105,6 +105,8 @@
     return MATERIALS[h % MATERIALS.length];
   };
 
+  const trSupplier = (name, lang) => lang === 'es' ? name.replace(/^Supplier/, 'Proveedor') : name;
+
   // Helper: build a load object.
   // results === null → load has not been AI-analysed yet, no chips shown.
   // results: { transparentPET, colouredPET, contaminants } each as percentages summing to ~100.
@@ -1176,8 +1178,9 @@
               // Aggregate suppliers by weight + their weighted-avg Transparent PET %
               const supplierAgg = {};
               bay.loads.forEach(l => {
-                if (!supplierAgg[l.supplier]) supplierAgg[l.supplier] = { weight: 0, qSum: 0, qWeight: 0 };
+                if (!supplierAgg[l.supplier]) supplierAgg[l.supplier] = { weight: 0, qSum: 0, qWeight: 0, lots: [] };
                 supplierAgg[l.supplier].weight += l.weight;
+                if (l.lot && !supplierAgg[l.supplier].lots.includes(l.lot)) supplierAgg[l.supplier].lots.push(l.lot);
                 if (l.results) {
                   supplierAgg[l.supplier].qSum += l.results.transparentPET * l.weight;
                   supplierAgg[l.supplier].qWeight += l.weight;
@@ -1187,7 +1190,8 @@
                 .map(([name, v]) => ({
                   name,
                   weight: v.weight,
-                  avgQuality: v.qWeight > 0 ? v.qSum / v.qWeight : null
+                  avgQuality: v.qWeight > 0 ? v.qSum / v.qWeight : null,
+                  lots: v.lots
                 }))
                 .sort((a, b) => b.weight - a.weight);
               const showAll = !!showAllSuppliers[bay.id];
@@ -1216,7 +1220,7 @@
                   data-bay-id={bay.id}
                   role="listitem"
                   className={
-                    'shrink-0 w-[260px] rounded-lg border transition bg-white overflow-hidden ' +
+                    'shrink-0 w-[310px] rounded-lg border transition bg-white overflow-hidden ' +
                     (blocked ? 'border-neutral-10 bg-neutral-5 opacity-70'
                       : (isFocus ? 'border-2 border-safi-600 ring-2 ring-safi-200'
                         : (someSelected ? 'border-safi-300 ring-1 ring-safi-200 bg-safi-50/40'
@@ -1299,7 +1303,10 @@
                             : 'bg-rose-100 text-rose-900';
                           return (
                             <li key={sup.name} className="flex items-center justify-between gap-2 text-[13px]">
-                              <span className="text-neutral-100 truncate">{sup.name}</span>
+                              <div className="min-w-0">
+                                <span className="text-neutral-100 truncate block">{trSupplier(sup.name, lang)}</span>
+                                {sup.lots.length > 0 && <span className="text-[11px] text-neutral-40 block truncate">{sup.lots.join(', ')}</span>}
+                              </div>
                               <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[13px] font-medium shrink-0 ${chipCls}`}>
                                 <Icon d={inSpec ? I.checkCircle : I.errorCircle} className="w-3.5 h-3.5" />
                                 {tr('goodMaterial', lang)}{sup.avgQuality != null ? ` ${sup.avgQuality.toFixed(1)}%` : ''}
@@ -1853,13 +1860,13 @@
                 </button>
                 <span className="text-neutral-40">/</span>
                 <span className="text-neutral-100 font-medium">
-                  {lang === 'es' ? 'Crear lista de picking' : 'Create picking list'}
+                  {lang === 'es' ? 'Alimentación a la banda' : 'Create picking list'}
                 </span>
               </nav>
               <div className="flex items-start justify-between gap-6">
                 <div>
                   <h1 id="create-picking-list-h1" className="text-3xl font-bold tracking-tight text-neutral-100">
-                    {lang === 'es' ? 'Crear lista de picking' : 'Create picking list'}
+                    {lang === 'es' ? 'Alimentación a la banda' : 'Create picking list'}
                   </h1>
                   <p className="text-[13px] text-neutral-60 mt-1">
                     {lang === 'es'
@@ -2551,7 +2558,7 @@
                               onClick={(e) => e.preventDefault()}
                               className="text-safi-700 hover:underline font-medium"
                             >#{m.lot}</a>
-                            <div className="text-neutral-60">{m.supplier}</div>
+                            <div className="text-neutral-60">{trSupplier(m.supplier, lang)}</div>
                           </td>
                           <td className="px-3 py-2.5 text-neutral-100 whitespace-nowrap">{fmtKg(m.totalReceived)}</td>
                           <td className="px-3 py-2.5 text-neutral-100 whitespace-nowrap">{fmtKg(m.processedWeight)}</td>
@@ -2865,13 +2872,23 @@
                 className="appearance-none w-full pl-3 pr-9 py-2 text-sm border border-neutral-10 rounded-md bg-white text-neutral-100 focus:border-safi-600"
                 defaultValue=""
               >
-                <option value="">All suppliers</option>
-                <option>Supplier A</option><option>Supplier B</option><option>Supplier C</option>
-                <option>Supplier D</option><option>Supplier E</option><option>Supplier F</option>
-                <option>Supplier G</option><option>Supplier H</option><option>Supplier I</option>
-                <option>Supplier J</option><option>Supplier K</option><option>Supplier L</option>
-                <option>Supplier M</option><option>Supplier N</option><option>Supplier O</option>
-                <option>Supplier P</option>
+                <option value="">{lang === 'es' ? 'Todos los proveedores' : 'All suppliers'}</option>
+                <option value="Supplier A">{trSupplier('Supplier A', lang)}</option>
+                <option value="Supplier B">{trSupplier('Supplier B', lang)}</option>
+                <option value="Supplier C">{trSupplier('Supplier C', lang)}</option>
+                <option value="Supplier D">{trSupplier('Supplier D', lang)}</option>
+                <option value="Supplier E">{trSupplier('Supplier E', lang)}</option>
+                <option value="Supplier F">{trSupplier('Supplier F', lang)}</option>
+                <option value="Supplier G">{trSupplier('Supplier G', lang)}</option>
+                <option value="Supplier H">{trSupplier('Supplier H', lang)}</option>
+                <option value="Supplier I">{trSupplier('Supplier I', lang)}</option>
+                <option value="Supplier J">{trSupplier('Supplier J', lang)}</option>
+                <option value="Supplier K">{trSupplier('Supplier K', lang)}</option>
+                <option value="Supplier L">{trSupplier('Supplier L', lang)}</option>
+                <option value="Supplier M">{trSupplier('Supplier M', lang)}</option>
+                <option value="Supplier N">{trSupplier('Supplier N', lang)}</option>
+                <option value="Supplier O">{trSupplier('Supplier O', lang)}</option>
+                <option value="Supplier P">{trSupplier('Supplier P', lang)}</option>
               </select>
               <label className="absolute -top-2 left-3 px-1 bg-[#fafafa] text-[13px] font-medium text-neutral-60">Supplier</label>
               <Icon d={I.chevron} className="w-4 h-4 absolute right-3 top-1/2 -translate-y-1/2 text-neutral-60 pointer-events-none" />
@@ -2884,7 +2901,7 @@
                 className="inline-flex items-center gap-2 px-4 py-2 rounded bg-safi-600 text-white text-sm font-medium hover:bg-safi-700 shadow-sm"
               >
                 <Icon d={I.plus} className="w-4 h-4" />
-                {lang === 'es' ? 'Crear lista de picking' : 'Create picking list'}
+                {lang === 'es' ? 'Alimentación a la banda' : 'Create picking list'}
               </button>
             )}
           </div>
@@ -3209,6 +3226,38 @@
                 </button>
               </div>
 
+              {/* Picking list metadata: shift, plant, creator, date */}
+              <div className="px-5 py-3 border-b border-neutral-10 shrink-0">
+                <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-[13px]">
+                  <div>
+                    <label className="block text-neutral-50 mb-0.5">{lang === 'es' ? 'Turno' : 'Shift'}</label>
+                    <select className="w-full border border-neutral-10 rounded-md px-2 py-1.5 text-neutral-100 bg-white text-[13px]">
+                      <option>{lang === 'es' ? 'Turno 1' : 'Shift 1'}</option>
+                      <option>{lang === 'es' ? 'Turno 2' : 'Shift 2'}</option>
+                      <option>{lang === 'es' ? 'Turno 3' : 'Shift 3'}</option>
+                      <option>{lang === 'es' ? 'Turno 4' : 'Shift 4'}</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-neutral-50 mb-0.5">{lang === 'es' ? 'Planta' : 'Plant'}</label>
+                    <select className="w-full border border-neutral-10 rounded-md px-2 py-1.5 text-neutral-100 bg-white text-[13px]">
+                      <option>{lang === 'es' ? 'Planta 1' : 'Plant 1'}</option>
+                      <option>{lang === 'es' ? 'Planta 2' : 'Plant 2'}</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-neutral-50 mb-0.5">{lang === 'es' ? 'Creado por' : 'Created by'}</label>
+                    <input type="text" placeholder={lang === 'es' ? 'Nombre' : 'Name'} className="w-full border border-neutral-10 rounded-md px-2 py-1.5 text-neutral-100 bg-white text-[13px] placeholder:text-neutral-30" />
+                  </div>
+                  <div>
+                    <label className="block text-neutral-50 mb-0.5">{lang === 'es' ? 'Fecha' : 'Date'}</label>
+                    <div className="border border-neutral-10 rounded-md px-2 py-1.5 text-neutral-100 bg-neutral-5 text-[13px]">
+                      {new Date().toLocaleDateString(lang === 'es' ? 'es-ES' : 'en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
               {/* Production window snapshot - gives the SL a target to aim at while picking */}
               {windowActive && (
                 <div className="px-5 py-3 border-b border-neutral-10 bg-neutral-5/60 shrink-0">
@@ -3270,7 +3319,7 @@
                         <div key={key} className="flex items-center gap-3 px-3 py-2.5">
                           <div className="flex-1 min-w-0">
                             <div className="text-sm text-neutral-100 truncate flex items-center gap-2">
-                              <span>{load.supplier}</span>
+                              <span>{trSupplier(load.supplier, lang)}</span>
                               <span className="text-neutral-40">#{load.lot}</span>
                               {partial && (
                                 <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[13px] font-semibold bg-amber-100 text-amber-900">
@@ -3860,7 +3909,7 @@
     const [bayFilter, setBayFilter] = useState(new Set());
     const [materialFilter, setMaterialFilter] = useState(new Set());
     // Show only picking-list bays (off by default = whole warehouse)
-    const [pickingListOnly, setPickingListOnly] = useState(false);
+    const [pickingListOnly, setPickingListOnly] = useState(true);
     // Summary card collapsed by default to save screen real estate
     const [summaryOpen, setSummaryOpen] = useState(true);
     // Bays for which the FO has chosen to show blocked loads ("Show N more loads")
@@ -4182,7 +4231,7 @@
                       <span className="font-medium">{tEN(`Zone ${item.sourceZoneId} · Bay ${item.sourceBayId}`, `Zona ${item.sourceZoneId} · Fila ${item.sourceBayId}`)}</span>
                     </div>
                     <div className="text-[13px] text-neutral-60 mt-0.5">
-                      {item.supplier} · <span className="font-mono">#{item.lot}</span>
+                      {trSupplier(item.supplier, lang)} · <span className="font-mono">#{item.lot}</span>
                     </div>
                   </div>
                   <button
@@ -4232,6 +4281,76 @@
               {pickingListOnly
                 ? tEN('Showing picking list only', 'Mostrando solo lista')
                 : tEN('Show picking list only', 'Mostrar solo lista')}
+            </button>
+          )}
+          {pickingList && pickingListSummary && (
+            <button
+              onClick={() => {
+                const isES = lang === 'es';
+                const now = new Date();
+                const dateStr = now.toLocaleDateString(isES ? 'es-ES' : 'en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+                const timeStr = now.toLocaleTimeString(isES ? 'es-ES' : 'en-GB', { hour: '2-digit', minute: '2-digit' });
+                const rows = [];
+                pickingListSummary.items.forEach(item => {
+                  item.loads.forEach(load => {
+                    const done = processed[load.id];
+                    rows.push(
+                      `<tr style="${done ? 'color:#999;text-decoration:line-through;' : ''}">` +
+                      `<td style="padding:6px 10px;border:1px solid #ddd;">${isES ? 'Zona' : 'Zone'} ${item.zoneId}</td>` +
+                      `<td style="padding:6px 10px;border:1px solid #ddd;">${item.bayId}</td>` +
+                      `<td style="padding:6px 10px;border:1px solid #ddd;">${trSupplier(load.supplier, lang)}</td>` +
+                      `<td style="padding:6px 10px;border:1px solid #ddd;">${load.lot}</td>` +
+                      `<td style="padding:6px 10px;border:1px solid #ddd;">${load.material}</td>` +
+                      `<td style="padding:6px 10px;border:1px solid #ddd;text-align:right">${load.bales}</td>` +
+                      `<td style="padding:6px 10px;border:1px solid #ddd;text-align:right">${(load.weight / 1000).toFixed(1)}t</td>` +
+                      `<td style="padding:6px 10px;border:1px solid #ddd;text-align:center">${done ? '✓' : '☐'}</td>` +
+                      `</tr>`
+                    );
+                  });
+                });
+                const html = `<!DOCTYPE html><html><head><title>${isES ? 'Lista de Picking' : 'Picking List'}</title>` +
+                  `<style>@media print{body{margin:0}}.page{font-family:system-ui,sans-serif;padding:32px;max-width:900px;margin:auto}` +
+                  `table{width:100%;border-collapse:collapse;font-size:13px}th{background:#f5f5f5;font-weight:600;text-align:left;padding:8px 10px;border:1px solid #ddd}` +
+                  `.hdr{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px}` +
+                  `.meta{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px 24px;font-size:13px;margin-bottom:20px;padding:12px 16px;background:#f9f9f9;border-radius:8px;border:1px solid #eee}` +
+                  `.meta dt{color:#888;margin-bottom:2px}.meta dd{font-weight:600;margin:0}` +
+                  `.summary{display:flex;gap:24px;font-size:14px;margin-bottom:20px}.summary div{}.summary .n{font-size:22px;font-weight:700}` +
+                  `.logo{font-size:20px;font-weight:700;color:#6347FF}</style></head>` +
+                  `<body><div class="page">` +
+                  `<div class="hdr"><div><div class="logo">Safi</div><h1 style="margin:4px 0 0;font-size:18px">${isES ? 'Lista de Alimentación a la Banda' : 'Picking List'}</h1></div>` +
+                  `<div style="text-align:right;font-size:13px;color:#666">${dateStr}<br/>${timeStr}</div></div>` +
+                  `<div class="meta">` +
+                  `<div><dt>${isES ? 'Planta' : 'Plant'}</dt><dd>${pickingList.name?.match(/Planta?\s*\d/i)?.[0] || 'Planta 1'}</dd></div>` +
+                  `<div><dt>${isES ? 'Turno' : 'Shift'}</dt><dd>—</dd></div>` +
+                  `<div><dt>${isES ? 'Creado por' : 'Created by'}</dt><dd>—</dd></div>` +
+                  `<div><dt>${isES ? 'Material' : 'Material'}</dt><dd>${pickingListSummary.materials.join(', ')}</dd></div>` +
+                  `</div>` +
+                  `<div class="summary">` +
+                  `<div><div class="n">${pickingListSummary.totalLoads}</div>${isES ? 'Cargas' : 'Loads'}</div>` +
+                  `<div><div class="n">${pickingListSummary.totalBales}</div>${isES ? 'Pacas' : 'Bales'}</div>` +
+                  `<div><div class="n">${(pickingListSummary.totalWeight / 1000).toFixed(1)}t</div>${isES ? 'Peso' : 'Weight'}</div>` +
+                  `</div>` +
+                  `<table><thead><tr>` +
+                  `<th>${isES ? 'Zona' : 'Zone'}</th>` +
+                  `<th>${isES ? 'Fila' : 'Bay'}</th>` +
+                  `<th>${isES ? 'Proveedor' : 'Supplier'}</th>` +
+                  `<th>${isES ? 'Lote' : 'Lot'}</th>` +
+                  `<th>${isES ? 'Material' : 'Material'}</th>` +
+                  `<th style="text-align:right">${isES ? 'Pacas' : 'Bales'}</th>` +
+                  `<th style="text-align:right">${isES ? 'Peso' : 'Weight'}</th>` +
+                  `<th style="text-align:center;width:40px">✓</th>` +
+                  `</tr></thead><tbody>${rows.join('')}</tbody></table>` +
+                  `</div></body></html>`;
+                const w = window.open('', '_blank');
+                w.document.write(html);
+                w.document.close();
+                w.focus();
+                setTimeout(() => w.print(), 400);
+              }}
+              className="inline-flex items-center gap-2 px-4 py-3 rounded-lg border border-neutral-10 bg-white text-neutral-80 hover:bg-neutral-5 min-h-[52px] text-[15px] font-medium"
+            >
+              <Icon d={I.print} className="w-5 h-5" />
+              {tEN('Print list', 'Imprimir lista')}
             </button>
           )}
           {anyFilterActive && (
@@ -4369,7 +4488,7 @@
                                 <li key={load.id} className={'px-3 sm:px-4 py-3 flex flex-wrap items-center gap-x-3 gap-y-2 ' + bgCls}>
                                   <div className="flex-1 min-w-0">
                                     <div className="flex items-center gap-2 flex-wrap">
-                                      <span className="text-[13px] font-medium text-neutral-100">{load.supplier}</span>
+                                      <span className="text-[13px] font-medium text-neutral-100">{trSupplier(load.supplier, lang)}</span>
                                       <span className="text-[13px] text-neutral-60">{tEN('Order ref', 'Ref. pedido')} <span className="font-mono">#{load.lot}</span></span>
                                       {onList && (
                                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-safi-100 text-safi-700 text-[13px] font-medium whitespace-nowrap">
