@@ -1919,7 +1919,7 @@
                                     selectionBales={selectionBales} setSelectionBales={setSelectionBales}
                                     pickerMode={pickerMode} />}
           {/* tab === 'picker' (original load-only Picker) is no longer routed - ForkliftPickerView retained in source */}
-          {tab === 'picker-merged' && <ForkliftPickerMergedView pickingList={pickingList} processed={processed}
+          {tab === 'picker-merged' && <ForkliftPickerMergedView pickingList={pickingList} setPickingList={setPickingList} processed={processed}
                                   setProcessed={setProcessed} lang={lang} setToast={setToast} bufferEnabled={bufferEnabled} pickerMode={pickerMode} />}
           {tab === 'history' && <HistoryView processed={processed} pickerMode={pickerMode} lang={lang} />}
         </div>
@@ -3926,7 +3926,7 @@
     );
   }
 
-  function ForkliftPickerMergedView({ pickingList, processed, setProcessed, lang, setToast, bufferEnabled = true, pickerMode = 'load' }) {
+  function ForkliftPickerMergedView({ pickingList, setPickingList, processed, setProcessed, lang, setToast, bufferEnabled = true, pickerMode = 'load' }) {
     // All zones open by default so FO sees everything on landing.
     const initialOpen = useMemo(() => {
       const o = {}; YARD.forEach(z => { o[z.id] = true; }); return o;
@@ -4719,6 +4719,16 @@
                     loadId: modal.load.id
                   }
                 }));
+                // Remove processed load from the picking list
+                if (pickingList && setPickingList) {
+                  const loadId = modal.load.id;
+                  setPickingList(prev => {
+                    if (!prev) return prev;
+                    const remaining = prev.loads.filter(l => l.loadId !== loadId);
+                    if (remaining.length === 0) return null;
+                    return { ...prev, loads: remaining };
+                  });
+                }
                 setModal(null);
                 setToast?.({
                   message: tEN(`Processed ${bales} bales from #${modal.load.lot} (${fmtKg(weight)})`, `Procesadas ${bales} pacas de #${modal.load.lot} (${fmtKg(weight)})`),
@@ -4745,6 +4755,16 @@
             pickerMode={pickerMode}
             onCancel={() => setModal(null)}
             onConfirm={({ bales, reason, weight }) => {
+              // Remove rejected load from picking list
+              if (modal.source === 'load' && modal.load && pickingList && setPickingList) {
+                const loadId = modal.load.id;
+                setPickingList(prev => {
+                  if (!prev) return prev;
+                  const remaining = prev.loads.filter(l => l.loadId !== loadId);
+                  if (remaining.length === 0) return null;
+                  return { ...prev, loads: remaining };
+                });
+              }
               setModal(null);
               setToast?.({
                 message: tEN(`Rejected ${bales} bales (${reason})`, `Rechazadas ${bales} pacas (${reason})`),
