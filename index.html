@@ -2064,7 +2064,7 @@
                                     activeSite={activeSite} activeShift={activeShift} setActiveShift={setActiveShift} sitePickingLists={sitePickingLists} />}
           {/* tab === 'picker' (original load-only Picker) is no longer routed - ForkliftPickerView retained in source */}
           {tab === 'picker-merged' && <ForkliftPickerMergedView pickingList={pickingList} setPickingList={setPickingList} processed={processed}
-                                  setProcessed={setProcessed} lang={lang} setToast={setToast} bufferEnabled={bufferEnabled} pickerMode={pickerMode} activeSite={activeSite} />}
+                                  setProcessed={setProcessed} lang={lang} setToast={setToast} bufferEnabled={bufferEnabled} pickerMode={pickerMode} activeSite={activeSite} activeShift={activeShift} />}
           {tab === 'history' && <HistoryView processed={processed} pickerMode={pickerMode} lang={lang} />}
         </div>
 
@@ -4146,7 +4146,7 @@
     );
   }
 
-  function ForkliftPickerMergedView({ pickingList, setPickingList, processed, setProcessed, lang, setToast, bufferEnabled = true, pickerMode = 'load', activeSite = 'apan1' }) {
+  function ForkliftPickerMergedView({ pickingList, setPickingList, processed, setProcessed, lang, setToast, bufferEnabled = true, pickerMode = 'load', activeSite = 'apan1', activeShift = 1 }) {
     // All zones open by default so FO sees everything on landing.
     const initialOpen = useMemo(() => {
       const o = {}; YARD.forEach(z => { o[z.id] = true; }); return o;
@@ -4345,6 +4345,16 @@
 
     return (
       <div className="space-y-4">
+        {/* Site + shift context banner so the picker always knows where/when they are working */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-safi-600 text-white text-[15px] font-semibold">
+            <Icon d={I.factory} className="w-4 h-4" />
+            {SITES.find(s => s.id === activeSite)?.name || activeSite}
+          </span>
+          <span className="inline-flex items-center px-3 py-1.5 rounded-lg bg-neutral-100 text-white text-[15px] font-semibold">
+            {lang === 'es' ? `Turno ${activeShift}` : `Shift ${activeShift}`}
+          </span>
+        </div>
         {/* R26/R31: Picking list summary - rendered ABOVE the buffer in bale-based mode.
             In load-based mode the FO works whole loads, so the summary card is hidden -
             picking-list bays are still highlighted in the main list below for context. */}
