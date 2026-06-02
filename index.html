@@ -274,7 +274,7 @@
 
   // Each bay carries a `capacity` (max loads it can physically hold).
   // current loads vs capacity → "Empty" | "Capacity for N load" | "Full" chip.
-  const YARD = [
+  const APAN1_YARD = [
     {
       // Zone A - no inventory rule. Loads can be selected and picked in any order
       // (no LIFO/FIFO blocking). Used for plants that pick by quality/priority.
@@ -389,6 +389,83 @@
       ]
     }
   ];
+
+  // ---- Apan 2 yard - distinct dummy zones so switching sites is visible ----
+  const APAN2_YARD = [
+    {
+      id: 'D',
+      name: 'Zone D',
+      esName: 'Zone D',
+      inventoryRule: 'NONE',
+      bays: [
+        {
+          id: 'D1', name: 'Bay D1', esName: 'Bay D1', accessible: true,
+          loads: [
+            L('Supplier H',  'LOT-D001', 16240, 28, r(97.1, 2.6, 0.3)),
+            L('Supplier I',  'LOT-D002', 13980, 24, r(92.8, 6.1, 1.1))
+          ]
+        },
+        {
+          id: 'D2', name: 'Bay D2', esName: 'Bay D2', accessible: true,
+          loads: [
+            L('Supplier J',  'LOT-D003', 15120, 30, r(88.4, 9.0, 2.6)),
+            L('Supplier K',  'LOT-D004', 12760, 22, r(95.5, 3.9, 0.6))
+          ]
+        },
+        {
+          id: 'D3', name: 'Bay D3', esName: 'Bay D3', accessible: true,
+          loads: [
+            L('Supplier L',  'LOT-D005', 18300, 34) // un-analysed
+          ]
+        },
+        {
+          id: 'D4', name: 'Bay D4', esName: 'Bay D4', accessible: false, blockedBy: 'D2',
+          loads: [
+            L('Supplier M',  'LOT-D006', 14550, 26, r(91.0, 7.2, 1.8))
+          ]
+        },
+        {
+          id: 'D5', name: 'Bay D5', esName: 'Bay D5', accessible: true,
+          loads: []
+        }
+      ]
+    },
+    {
+      id: 'E',
+      name: 'Zone E',
+      esName: 'Zone E',
+      inventoryRule: 'FIFO',
+      bays: [
+        {
+          id: 'E1', name: 'Bay E1', esName: 'Bay E1', accessible: true,
+          loads: [
+            L('Supplier N',  'LOT-E001',  9840, 20, r(94.6, 4.8, 0.6)),
+            L('Supplier O',  'LOT-E002', 17220, 36, r(96.9, 2.8, 0.3))
+          ]
+        },
+        {
+          id: 'E2', name: 'Bay E2', esName: 'Bay E2', accessible: true,
+          loads: [
+            L('Supplier P',  'LOT-E003', 11430, 25, r(89.7, 8.1, 2.2))
+          ]
+        },
+        {
+          id: 'E3', name: 'Bay E3', esName: 'Bay E3', accessible: false, blockedBy: 'E1',
+          loads: [
+            L('Supplier A',  'LOT-E004', 13900, 29, r(93.2, 5.5, 1.3))
+          ]
+        },
+        {
+          id: 'E4', name: 'Bay E4', esName: 'Bay E4', accessible: true,
+          loads: []
+        }
+      ]
+    }
+  ];
+
+  const SITE_YARDS = { apan1: APAN1_YARD, apan2: APAN2_YARD };
+  // Mutable alias resolved per active site at render time (same pattern as ACTIVE_WINDOW).
+  let YARD = APAN1_YARD;
 
   // Active production target (top-of-page card)
   const SITES = [
@@ -1818,6 +1895,7 @@
     // Site selection
     const [activeSite, setActiveSite] = useState('apan1');
     ACTIVE_WINDOW = SITE_WINDOWS[activeSite];
+    YARD = SITE_YARDS[activeSite];
 
     // Per-site picking lists: { apan1: { 1: list, 2: list, 3: list }, apan2: { ... } }
     const [sitePickingLists, setSitePickingLists] = useState({ apan1: {}, apan2: {} });
@@ -1935,31 +2013,10 @@
                       </button>
                     ))}
                   </div>
-                  {/* Shift selector */}
-                  <div className="flex items-center bg-neutral-5 rounded-lg p-0.5 border border-neutral-10">
-                    {[1, 2, 3].map(shift => {
-                      const hasData = !!sitePickingLists[activeSite]?.[shift];
-                      return (
-                        <button
-                          key={shift}
-                          onClick={() => setActiveShift(shift)}
-                          className={
-                            'px-3 py-1.5 rounded-md text-[13px] font-medium transition-all relative ' +
-                            (activeShift === shift
-                              ? 'bg-white text-neutral-100 shadow-sm'
-                              : 'text-neutral-60 hover:text-neutral-100')
-                          }
-                        >
-                          {lang === 'es' ? `T${shift}` : `S${shift}`}
-                          {hasData && <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-safi-600 rounded-full" />}
-                        </button>
-                      );
-                    })}
-                  </div>
                 </div>
               </div>
               <p className="text-[13px] text-neutral-50 mt-1">
-                {SITES.find(s => s.id === activeSite)?.name} · {lang === 'es' ? `Turno ${activeShift}` : `Shift ${activeShift}`} · {new Date().toLocaleDateString(lang === 'es' ? 'es-ES' : 'en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                {SITES.find(s => s.id === activeSite)?.name} · {new Date().toLocaleDateString(lang === 'es' ? 'es-ES' : 'en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
               </p>
             </div>
           )}
@@ -1988,10 +2045,10 @@
                                     setToast={setToast} processed={processed} lang={lang}
                                     selectionBales={selectionBales} setSelectionBales={setSelectionBales}
                                     pickerMode={pickerMode}
-                                    activeSite={activeSite} activeShift={activeShift} sitePickingLists={sitePickingLists} />}
+                                    activeSite={activeSite} activeShift={activeShift} setActiveShift={setActiveShift} sitePickingLists={sitePickingLists} />}
           {/* tab === 'picker' (original load-only Picker) is no longer routed - ForkliftPickerView retained in source */}
           {tab === 'picker-merged' && <ForkliftPickerMergedView pickingList={pickingList} setPickingList={setPickingList} processed={processed}
-                                  setProcessed={setProcessed} lang={lang} setToast={setToast} bufferEnabled={bufferEnabled} pickerMode={pickerMode} />}
+                                  setProcessed={setProcessed} lang={lang} setToast={setToast} bufferEnabled={bufferEnabled} pickerMode={pickerMode} activeSite={activeSite} />}
           {tab === 'history' && <HistoryView processed={processed} pickerMode={pickerMode} lang={lang} />}
         </div>
 
@@ -2716,7 +2773,7 @@
   // SHIFT LEADER VIEW - progressive disclosure + picking-list creation
   // ============================================================================
 
-  function ShiftLeaderView({ layout = 'accordion', pickingList, setPickingList, setTab, setRole, slMode, setSlMode, windowActive, setWindowActive, setToast, processed = {}, lang = 'en', selectionBales, setSelectionBales, pickerMode = 'load', activeSite = 'apan1', activeShift = 1, sitePickingLists = {} }) {
+  function ShiftLeaderView({ layout = 'accordion', pickingList, setPickingList, setTab, setRole, slMode, setSlMode, windowActive, setWindowActive, setToast, processed = {}, lang = 'en', selectionBales, setSelectionBales, pickerMode = 'load', activeSite = 'apan1', activeShift = 1, setActiveShift = () => {}, sitePickingLists = {} }) {
     const isCreating = slMode === 'create';
     const isSticky = layout === 'sticky';
     const isSpatial = layout === 'spatial';
@@ -2727,7 +2784,7 @@
         ...bay,
         loads: bay.loads.filter(l => !processed[l.id] || processed[l.id].partial)
       }))
-    })), [processed]);
+    })), [processed, activeSite]);
 
     // Zone & bay filter - when active, only show selected bays and force-expand their zones.
     const [bayFilter, setBayFilter] = useState(new Set());
@@ -3308,9 +3365,15 @@
                   </div>
                   <div>
                     <label className="block text-neutral-50 mb-0.5">{lang === 'es' ? 'Turno' : 'Shift'}</label>
-                    <div className="border border-neutral-10 rounded-md px-2 py-1.5 text-neutral-100 bg-neutral-5 text-[13px] font-medium">
-                      {lang === 'es' ? `Turno ${activeShift}` : `Shift ${activeShift}`}
-                    </div>
+                    <select
+                      value={activeShift}
+                      onChange={(e) => setActiveShift(Number(e.target.value))}
+                      className="w-full border border-neutral-10 rounded-md px-2 py-1.5 text-neutral-100 bg-white text-[13px] font-medium focus:border-safi-600"
+                    >
+                      {[1, 2, 3].map(s => (
+                        <option key={s} value={s}>{lang === 'es' ? `Turno ${s}` : `Shift ${s}`}</option>
+                      ))}
+                    </select>
                   </div>
                   <div>
                     <label className="block text-neutral-50 mb-0.5">{lang === 'es' ? 'Creado por' : 'Created by'}</label>
@@ -4022,7 +4085,7 @@
     );
   }
 
-  function ForkliftPickerMergedView({ pickingList, setPickingList, processed, setProcessed, lang, setToast, bufferEnabled = true, pickerMode = 'load' }) {
+  function ForkliftPickerMergedView({ pickingList, setPickingList, processed, setProcessed, lang, setToast, bufferEnabled = true, pickerMode = 'load', activeSite = 'apan1' }) {
     // All zones open by default so FO sees everything on landing.
     const initialOpen = useMemo(() => {
       const o = {}; YARD.forEach(z => { o[z.id] = true; }); return o;
@@ -4107,7 +4170,7 @@
         });
       });
       return out;
-    }, [lang]);
+    }, [lang, activeSite]);
 
     const materialOptions = MATERIALS.map(m => ({ key: m, label: m }));
 
@@ -4126,7 +4189,7 @@
         });
         return { zone, bays };
       }).filter(z => z.bays.length > 0);
-    }, [pickingListOnly, pickingListBays, bayFilter, materialFilter]);
+    }, [pickingListOnly, pickingListBays, bayFilter, materialFilter, activeSite]);
 
     const anyFilterActive = pickingListOnly || bayFilter.size > 0 || materialFilter.size > 0;
     const clearAllFilters = () => {
