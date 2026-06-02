@@ -391,14 +391,32 @@
   ];
 
   // Active production target (top-of-page card)
-  const ACTIVE_WINDOW = {
-    material: 'BLANCA',
-    targetInput: 90.0,
-    elapsed: '02:14:08',
-    balesProcessed: 64,
-    weightProcessed: 32480,
-    actualInput: 89.4
+  const SITES = [
+    { id: 'apan1', name: 'Apan 1', esName: 'Apan 1' },
+    { id: 'apan2', name: 'Apan 2', esName: 'Apan 2' }
+  ];
+
+  const PRODUCTION_WINDOWS = {
+    apan1: {
+      material: 'BLANCA',
+      targetInput: 90.0,
+      elapsed: '02:14:08',
+      balesProcessed: 64,
+      weightProcessed: 32480,
+      actualInput: 89.4
+    },
+    apan2: {
+      material: 'AMERICANA',
+      targetInput: 88.0,
+      elapsed: '04:32:15',
+      balesProcessed: 112,
+      weightProcessed: 56200,
+      actualInput: 87.1
+    }
   };
+
+  // Legacy alias - components still reference ACTIVE_WINDOW; resolved per site at render time.
+  let ACTIVE_WINDOW = PRODUCTION_WINDOWS.apan1;
 
   // ----------------------------------------------------------------------------
   // UTILITIES
@@ -1797,9 +1815,26 @@
     // Tabs - accordion variant removed. Sticky is the default.
     const [tab, setTab] = useState('pw-v2');
 
-    // Picking list state (lifted to the page so both tabs share it)
-    // Shape: { id, name, createdAt, loads: [{zoneId, bayId, loadId}], note }
-    const [pickingList, setPickingList] = useState(null);
+    // Site selection
+    const [activeSite, setActiveSite] = useState('apan1');
+    ACTIVE_WINDOW = PRODUCTION_WINDOWS[activeSite];
+
+    // Per-site picking lists: { apan1: { 1: list, 2: list, 3: list }, apan2: { ... } }
+    const [sitePickingLists, setSitePickingLists] = useState({ apan1: {}, apan2: {} });
+    // Current shift for the active site
+    const [activeShift, setActiveShift] = useState(1);
+
+    // Picking list state — derived from site + shift
+    const pickingList = sitePickingLists[activeSite]?.[activeShift] || null;
+    const setPickingList = (valOrFn) => {
+      setSitePickingLists(prev => {
+        const siteLists = { ...(prev[activeSite] || {}) };
+        const current = siteLists[activeShift] || null;
+        const next = typeof valOrFn === 'function' ? valOrFn(current) : valOrFn;
+        siteLists[activeShift] = next;
+        return { ...prev, [activeSite]: siteLists };
+      });
+    };
 
     // Processed load IDs (FO marks these as processed in the Picker tab)
     const [processed, setProcessed] = useState({}); // { loadId: { bales, weight, at } }
@@ -1878,9 +1913,54 @@
             </div>
           ) : (
             <div className="mb-4">
-              <h1 className="text-3xl font-bold tracking-tight text-neutral-100">
-                {lang === 'es' ? 'Producción' : 'Production'}
-              </h1>
+              <div className="flex items-center justify-between gap-4 flex-wrap">
+                <h1 className="text-3xl font-bold tracking-tight text-neutral-100">
+                  {lang === 'es' ? 'Producción' : 'Production'}
+                </h1>
+                <div className="flex items-center gap-3">
+                  {/* Site selector */}
+                  <div className="flex items-center bg-neutral-5 rounded-lg p-0.5 border border-neutral-10">
+                    {SITES.map(site => (
+                      <button
+                        key={site.id}
+                        onClick={() => setActiveSite(site.id)}
+                        className={
+                          'px-3 py-1.5 rounded-md text-[13px] font-medium transition-all ' +
+                          (activeSite === site.id
+                            ? 'bg-white text-neutral-100 shadow-sm'
+                            : 'text-neutral-60 hover:text-neutral-100')
+                        }
+                      >
+                        {site.name}
+                      </button>
+                    ))}
+                  </div>
+                  {/* Shift selector */}
+                  <div className="flex items-center bg-neutral-5 rounded-lg p-0.5 border border-neutral-10">
+                    {[1, 2, 3].map(shift => {
+                      const hasData = !!sitePickingLists[activeSite]?.[shift];
+                      return (
+                        <button
+                          key={shift}
+                          onClick={() => setActiveShift(shift)}
+                          className={
+                            'px-3 py-1.5 rounded-md text-[13px] font-medium transition-all relative ' +
+                            (activeShift === shift
+                              ? 'bg-white text-neutral-100 shadow-sm'
+                              : 'text-neutral-60 hover:text-neutral-100')
+                          }
+                        >
+                          {lang === 'es' ? `T${shift}` : `S${shift}`}
+                          {hasData && <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-safi-600 rounded-full" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+              <p className="text-[13px] text-neutral-50 mt-1">
+                {SITES.find(s => s.id === activeSite)?.name} · {lang === 'es' ? `Turno ${activeShift}` : `Shift ${activeShift}`} · {new Date().toLocaleDateString(lang === 'es' ? 'es-ES' : 'en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+              </p>
             </div>
           )}
 
@@ -1908,7 +1988,8 @@
                                     windowActive={windowActive} setWindowActive={setWindowActive}
                                     setToast={setToast} processed={processed} lang={lang}
                                     selectionBales={selectionBales} setSelectionBales={setSelectionBales}
-                                    pickerMode={pickerMode} />}
+                                    pickerMode={pickerMode}
+                                    activeSite={activeSite} activeShift={activeShift} sitePickingLists={sitePickingLists} />}
           {tab === 'pw-layout' && <ShiftLeaderView
                                     layout="spatial"
                                     pickingList={pickingList} setPickingList={setPickingList}
@@ -1917,7 +1998,8 @@
                                     windowActive={windowActive} setWindowActive={setWindowActive}
                                     setToast={setToast} processed={processed} lang={lang}
                                     selectionBales={selectionBales} setSelectionBales={setSelectionBales}
-                                    pickerMode={pickerMode} />}
+                                    pickerMode={pickerMode}
+                                    activeSite={activeSite} activeShift={activeShift} sitePickingLists={sitePickingLists} />}
           {/* tab === 'picker' (original load-only Picker) is no longer routed - ForkliftPickerView retained in source */}
           {tab === 'picker-merged' && <ForkliftPickerMergedView pickingList={pickingList} setPickingList={setPickingList} processed={processed}
                                   setProcessed={setProcessed} lang={lang} setToast={setToast} bufferEnabled={bufferEnabled} pickerMode={pickerMode} />}
@@ -2645,7 +2727,7 @@
   // SHIFT LEADER VIEW - progressive disclosure + picking-list creation
   // ============================================================================
 
-  function ShiftLeaderView({ layout = 'accordion', pickingList, setPickingList, setTab, setRole, slMode, setSlMode, windowActive, setWindowActive, setToast, processed = {}, lang = 'en', selectionBales, setSelectionBales, pickerMode = 'load' }) {
+  function ShiftLeaderView({ layout = 'accordion', pickingList, setPickingList, setTab, setRole, slMode, setSlMode, windowActive, setWindowActive, setToast, processed = {}, lang = 'en', selectionBales, setSelectionBales, pickerMode = 'load', activeSite = 'apan1', activeShift = 1, sitePickingLists = {} }) {
     const isCreating = slMode === 'create';
     const isSticky = layout === 'sticky';
     const isSpatial = layout === 'spatial';
@@ -3226,24 +3308,20 @@
                 </button>
               </div>
 
-              {/* Picking list metadata: shift, plant, creator, date */}
+              {/* Picking list metadata: site, shift, creator, date */}
               <div className="px-5 py-3 border-b border-neutral-10 shrink-0">
                 <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-[13px]">
                   <div>
-                    <label className="block text-neutral-50 mb-0.5">{lang === 'es' ? 'Turno' : 'Shift'}</label>
-                    <select className="w-full border border-neutral-10 rounded-md px-2 py-1.5 text-neutral-100 bg-white text-[13px]">
-                      <option>{lang === 'es' ? 'Turno 1' : 'Shift 1'}</option>
-                      <option>{lang === 'es' ? 'Turno 2' : 'Shift 2'}</option>
-                      <option>{lang === 'es' ? 'Turno 3' : 'Shift 3'}</option>
-                      <option>{lang === 'es' ? 'Turno 4' : 'Shift 4'}</option>
-                    </select>
+                    <label className="block text-neutral-50 mb-0.5">{lang === 'es' ? 'Planta' : 'Site'}</label>
+                    <div className="border border-neutral-10 rounded-md px-2 py-1.5 text-neutral-100 bg-neutral-5 text-[13px] font-medium">
+                      {SITES.find(s => s.id === activeSite)?.name}
+                    </div>
                   </div>
                   <div>
-                    <label className="block text-neutral-50 mb-0.5">{lang === 'es' ? 'Planta' : 'Plant'}</label>
-                    <select className="w-full border border-neutral-10 rounded-md px-2 py-1.5 text-neutral-100 bg-white text-[13px]">
-                      <option>{lang === 'es' ? 'Planta 1' : 'Plant 1'}</option>
-                      <option>{lang === 'es' ? 'Planta 2' : 'Plant 2'}</option>
-                    </select>
+                    <label className="block text-neutral-50 mb-0.5">{lang === 'es' ? 'Turno' : 'Shift'}</label>
+                    <div className="border border-neutral-10 rounded-md px-2 py-1.5 text-neutral-100 bg-neutral-5 text-[13px] font-medium">
+                      {lang === 'es' ? `Turno ${activeShift}` : `Shift ${activeShift}`}
+                    </div>
                   </div>
                   <div>
                     <label className="block text-neutral-50 mb-0.5">{lang === 'es' ? 'Creado por' : 'Created by'}</label>
@@ -3254,6 +3332,35 @@
                     <div className="border border-neutral-10 rounded-md px-2 py-1.5 text-neutral-100 bg-neutral-5 text-[13px]">
                       {new Date().toLocaleDateString(lang === 'es' ? 'es-ES' : 'en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
                     </div>
+                  </div>
+                </div>
+                {/* Shift picking list status for this site */}
+                <div className="mt-3 pt-3 border-t border-neutral-10/60">
+                  <div className="text-[11px] text-neutral-50 uppercase tracking-wide mb-1.5">{lang === 'es' ? 'Listas del día' : "Today's lists"}</div>
+                  <div className="flex gap-2">
+                    {[1, 2, 3].map(s => {
+                      const list = sitePickingLists[activeSite]?.[s];
+                      const isCurrent = s === activeShift;
+                      return (
+                        <button
+                          key={s}
+                          onClick={() => setActiveShift(s)}
+                          className={
+                            'flex-1 px-2 py-1.5 rounded-md text-[12px] font-medium text-center border transition-all ' +
+                            (isCurrent
+                              ? 'border-safi-600 bg-safi-50 text-safi-700'
+                              : list
+                                ? 'border-success-200 bg-success-100/40 text-success-300'
+                                : 'border-neutral-10 bg-white text-neutral-50')
+                          }
+                        >
+                          <div>{lang === 'es' ? `T${s}` : `S${s}`}</div>
+                          <div className="text-[10px] mt-0.5 opacity-70">
+                            {list ? (list.loads?.length + ' ' + (lang === 'es' ? 'cargas' : 'loads')) : (lang === 'es' ? 'Vacío' : 'Empty')}
+                          </div>
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
               </div>
