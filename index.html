@@ -1813,7 +1813,7 @@
     const setRole = () => {};
 
     // Tabs - accordion variant removed. Sticky is the default.
-    const [tab, setTab] = useState('pw-v2');
+    const [tab, setTab] = useState('pw-layout');
 
     // Site selection
     const [activeSite, setActiveSite] = useState('apan1');
@@ -1884,7 +1884,7 @@
       <AppShell lang={lang} setLang={setLang} pickerMode={pickerMode} setPickerMode={setPickerMode}>
         <div className="px-8 py-6">
           {/* Page heading swaps when SL enters Create picking list mode */}
-          {slMode === 'create' && (tab === 'pw-v2' || tab === 'pw-layout') ? (
+          {slMode === 'create' && tab === 'pw-layout' ? (
             <div>
               <nav aria-label="Breadcrumb" className="flex items-center gap-2 text-[13px] mb-2">
                 <button
@@ -1969,10 +1969,9 @@
               in the nav - its component (ForkliftPickerView) is left in the source so
               we can reinstate it cheaply if needed. The merged tab now drives both
               load-based and bale-based flows via the header Picker mode toggle. */}
-          {!(slMode === 'create' && (tab === 'pw-v2' || tab === 'pw-layout')) && (
+          {!(slMode === 'create' && tab === 'pw-layout') && (
             <div className="border-b border-neutral-10 mb-6 flex gap-6 text-[13px] overflow-x-auto">
-              <Tab id="pw-v2"     label={lang === 'es' ? 'Almacén (lista vertical)' : 'Warehouse (vertical-list)'} tab={tab} setTab={setTab} />
-              <Tab id="pw-layout" label={lang === 'es' ? 'Almacén (plano)' : 'Warehouse (layout)'} tab={tab} setTab={setTab} />
+              <Tab id="pw-layout" label={lang === 'es' ? 'Almacén' : 'Warehouse'} tab={tab} setTab={setTab} />
               <Tab id="picker-merged" label={lang === 'es' ? 'Picking' : 'Picker'}                                    tab={tab} setTab={setTab}
                    badge={pickingList ? loadsRemaining : null} />
               <Tab id="history"   label={lang === 'es' ? 'Historial' : 'History'}                                         tab={tab} setTab={setTab} />
@@ -1980,16 +1979,6 @@
             </div>
           )}
 
-          {tab === 'pw-v2'     && <ShiftLeaderView
-                                    layout="sticky"
-                                    pickingList={pickingList} setPickingList={setPickingList}
-                                    setTab={setTab} setRole={setRole}
-                                    slMode={slMode} setSlMode={setSlMode}
-                                    windowActive={windowActive} setWindowActive={setWindowActive}
-                                    setToast={setToast} processed={processed} lang={lang}
-                                    selectionBales={selectionBales} setSelectionBales={setSelectionBales}
-                                    pickerMode={pickerMode}
-                                    activeSite={activeSite} activeShift={activeShift} sitePickingLists={sitePickingLists} />}
           {tab === 'pw-layout' && <ShiftLeaderView
                                     layout="spatial"
                                     pickingList={pickingList} setPickingList={setPickingList}
