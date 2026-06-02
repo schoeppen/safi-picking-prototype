@@ -396,7 +396,7 @@
     { id: 'apan2', name: 'Apan 2', esName: 'Apan 2' }
   ];
 
-  const PRODUCTION_WINDOWS = {
+  const SITE_WINDOWS = {
     apan1: {
       material: 'BLANCA',
       targetInput: 90.0,
@@ -416,7 +416,7 @@
   };
 
   // Legacy alias - components still reference ACTIVE_WINDOW; resolved per site at render time.
-  let ACTIVE_WINDOW = PRODUCTION_WINDOWS.apan1;
+  let ACTIVE_WINDOW = SITE_WINDOWS.apan1;
 
   // ----------------------------------------------------------------------------
   // UTILITIES
@@ -1817,7 +1817,7 @@
 
     // Site selection
     const [activeSite, setActiveSite] = useState('apan1');
-    ACTIVE_WINDOW = PRODUCTION_WINDOWS[activeSite];
+    ACTIVE_WINDOW = SITE_WINDOWS[activeSite];
 
     // Per-site picking lists: { apan1: { 1: list, 2: list, 3: list }, apan2: { ... } }
     const [sitePickingLists, setSitePickingLists] = useState({ apan1: {}, apan2: {} });
