@@ -475,7 +475,7 @@
 
   const SITE_WINDOWS = {
     apan1: {
-      material: 'BLANCA',
+      material: 'Clear PET Bottles',
       targetInput: 90.0,
       elapsed: '02:14:08',
       balesProcessed: 64,
@@ -483,7 +483,7 @@
       actualInput: 89.4
     },
     apan2: {
-      material: 'AMERICANA',
+      material: 'Clear PET Bottles',
       targetInput: 88.0,
       elapsed: '04:32:15',
       balesProcessed: 112,
@@ -1894,8 +1894,15 @@
 
     // Site selection
     const [activeSite, setActiveSite] = useState('apan1');
-    ACTIVE_WINDOW = SITE_WINDOWS[activeSite];
     YARD = SITE_YARDS[activeSite];
+
+    // Per-site production window config + active flag (1 window per site per day)
+    const [siteWindows, setSiteWindows] = useState({
+      apan1: { ...SITE_WINDOWS.apan1 },
+      apan2: { ...SITE_WINDOWS.apan2 }
+    });
+    const [siteWindowActive, setSiteWindowActive] = useState({ apan1: true, apan2: true });
+    ACTIVE_WINDOW = siteWindows[activeSite];
 
     // Per-site picking lists: { apan1: { 1: list, 2: list, 3: list }, apan2: { ... } }
     const [sitePickingLists, setSitePickingLists] = useState({ apan1: {}, apan2: {} });
@@ -1917,8 +1924,15 @@
     // Processed load IDs (FO marks these as processed in the Picker tab)
     const [processed, setProcessed] = useState({}); // { loadId: { bales, weight, at } }
 
-    // Active production window flag (so SL can start one from the confirm step)
-    const [windowActive, setWindowActive] = useState(true);
+    // Active production window flag for the current site
+    const windowActive = siteWindowActive[activeSite];
+    const startWindow = (config) => {
+      if (config) setSiteWindows(prev => ({ ...prev, [activeSite]: { ...prev[activeSite], ...config } }));
+      setSiteWindowActive(prev => ({ ...prev, [activeSite]: true }));
+    };
+    const finishWindow = () => {
+      setSiteWindowActive(prev => ({ ...prev, [activeSite]: false }));
+    };
 
     // SL workflow mode: 'default' (overview only) | 'create' (selecting loads) | 'confirm' (review modal)
     const [slMode, setSlMode] = useState('default');
@@ -2041,7 +2055,7 @@
                                     pickingList={pickingList} setPickingList={setPickingList}
                                     setTab={setTab} setRole={setRole}
                                     slMode={slMode} setSlMode={setSlMode}
-                                    windowActive={windowActive} setWindowActive={setWindowActive}
+                                    windowActive={windowActive} startWindow={startWindow} finishWindow={finishWindow}
                                     setToast={setToast} processed={processed} lang={lang}
                                     selectionBales={selectionBales} setSelectionBales={setSelectionBales}
                                     pickerMode={pickerMode}
@@ -2773,7 +2787,7 @@
   // SHIFT LEADER VIEW - progressive disclosure + picking-list creation
   // ============================================================================
 
-  function ShiftLeaderView({ layout = 'accordion', pickingList, setPickingList, setTab, setRole, slMode, setSlMode, windowActive, setWindowActive, setToast, processed = {}, lang = 'en', selectionBales, setSelectionBales, pickerMode = 'load', activeSite = 'apan1', activeShift = 1, setActiveShift = () => {}, sitePickingLists = {} }) {
+  function ShiftLeaderView({ layout = 'accordion', pickingList, setPickingList, setTab, setRole, slMode, setSlMode, windowActive, startWindow = () => {}, finishWindow = () => {}, setToast, processed = {}, lang = 'en', selectionBales, setSelectionBales, pickerMode = 'load', activeSite = 'apan1', activeShift = 1, setActiveShift = () => {}, sitePickingLists = {} }) {
     const isCreating = slMode === 'create';
     const isSticky = layout === 'sticky';
     const isSpatial = layout === 'spatial';
@@ -2936,7 +2950,7 @@
     return (
       <Fragment>
         {/* Active production window - hidden during Create picking list */}
-        {!isCreating && <ActiveProductionWindow active={windowActive} />}
+        {!isCreating && <ActiveProductionWindow active={windowActive} onStart={startWindow} onFinish={finishWindow} lang={lang} />}
 
         {/* Existing-list banner - blue info style with Edit / destructive Clear */}
         {!isCreating && pickingList && (
@@ -3386,35 +3400,6 @@
                     </div>
                   </div>
                 </div>
-                {/* Shift picking list status for this site */}
-                <div className="mt-3 pt-3 border-t border-neutral-10/60">
-                  <div className="text-[11px] text-neutral-50 uppercase tracking-wide mb-1.5">{lang === 'es' ? 'Listas del día' : "Today's lists"}</div>
-                  <div className="flex gap-2">
-                    {[1, 2, 3].map(s => {
-                      const list = sitePickingLists[activeSite]?.[s];
-                      const isCurrent = s === activeShift;
-                      return (
-                        <button
-                          key={s}
-                          onClick={() => setActiveShift(s)}
-                          className={
-                            'flex-1 px-2 py-1.5 rounded-md text-[12px] font-medium text-center border transition-all ' +
-                            (isCurrent
-                              ? 'border-safi-600 bg-safi-50 text-safi-700'
-                              : list
-                                ? 'border-success-200 bg-success-100/40 text-success-300'
-                                : 'border-neutral-10 bg-white text-neutral-50')
-                          }
-                        >
-                          <div>{lang === 'es' ? `T${s}` : `S${s}`}</div>
-                          <div className="text-[10px] mt-0.5 opacity-70">
-                            {list ? (list.loads?.length + ' ' + (lang === 'es' ? 'cargas' : 'loads')) : (lang === 'es' ? 'Vacío' : 'Empty')}
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
               </div>
 
               {/* Production window snapshot - gives the SL a target to aim at while picking */}
@@ -3675,38 +3660,112 @@
     );
   }
 
-  function ActiveProductionWindow({ active }) {
+  function ActiveProductionWindow({ active, onStart = () => {}, onFinish = () => {}, lang = 'en' }) {
+    const tEN = (en, es) => lang === 'es' ? es : en;
+    const [showStart, setShowStart] = useState(false);
+    const [showFinish, setShowFinish] = useState(false);
+    const [material, setMaterial] = useState('Clear PET Bottles');
+    const [target, setTarget] = useState('90.0');
+
     if (!active) {
       return (
-        <div className="bg-white border border-neutral-10 rounded-xl px-5 py-4 flex items-center justify-between">
-          <div className="flex items-start gap-3">
-            <Icon d={I.factory} className="w-5 h-5 text-neutral-60 mt-0.5" />
-            <div>
-              <div className="font-semibold text-neutral-100">No active production window</div>
-              <p className="text-sm text-neutral-60 mt-0.5">Start a window to begin tracking what gets processed.</p>
+        <>
+          <div className="bg-white border border-neutral-10 rounded-xl px-5 py-4 flex items-center justify-between">
+            <div className="flex items-start gap-3">
+              <Icon d={I.factory} className="w-5 h-5 text-neutral-60 mt-0.5" />
+              <div>
+                <div className="font-semibold text-neutral-100">{tEN('No active production window', 'Sin ventana de producción activa')}</div>
+                <p className="text-sm text-neutral-60 mt-0.5">{tEN('Start a window to begin tracking what gets processed.', 'Inicia una ventana para registrar lo que se procesa.')}</p>
+              </div>
             </div>
+            <button
+              onClick={() => setShowStart(true)}
+              className="px-3 py-2 rounded-lg bg-safi-600 text-white text-sm font-medium hover:bg-safi-700"
+            >
+              {tEN('Start production window', 'Iniciar ventana de producción')}
+            </button>
           </div>
-          <button className="px-3 py-2 rounded border border-neutral-10 text-sm font-medium text-neutral-80 hover:bg-neutral-5">
-            Start production window
-          </button>
-        </div>
+          {showStart && (
+            <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={() => setShowStart(false)}>
+              <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6" onClick={e => e.stopPropagation()}>
+                <h3 className="font-bold text-lg text-neutral-100">{tEN('Start production window', 'Iniciar ventana de producción')}</h3>
+                <p className="text-[13px] text-neutral-60 mt-1">{tEN('Set the material and target input for this window.', 'Define el material y el objetivo de entrada para esta ventana.')}</p>
+                <div className="mt-4 space-y-3">
+                  <div>
+                    <label className="block text-[13px] font-medium text-neutral-60 mb-1">{tEN('Material', 'Material')}</label>
+                    <select value={material} onChange={e => setMaterial(e.target.value)} className="w-full border border-neutral-10 rounded-md px-3 py-2 text-sm text-neutral-100 bg-white focus:border-safi-600">
+                      <option>Clear PET Bottles</option>
+                      <option>BLANCA</option>
+                      <option>AMERICANA</option>
+                      <option>AZUL</option>
+                      <option>50/50</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[13px] font-medium text-neutral-60 mb-1">{tEN('Target input (%)', 'Objetivo de entrada (%)')}</label>
+                    <input type="number" min="0" max="100" step="0.1" value={target} onChange={e => setTarget(e.target.value)} className="w-full border border-neutral-10 rounded-md px-3 py-2 text-sm text-neutral-100 bg-white focus:border-safi-600" />
+                  </div>
+                </div>
+                <div className="mt-6 flex items-center gap-2 justify-end">
+                  <button onClick={() => setShowStart(false)} className="px-4 py-2 rounded border border-neutral-10 text-neutral-80 font-medium hover:bg-neutral-5 min-h-[44px]">
+                    {tEN('Cancel', 'Cancelar')}
+                  </button>
+                  <button
+                    onClick={() => {
+                      onStart({
+                        material,
+                        targetInput: Number(target) || 0,
+                        elapsed: '00:00:00',
+                        balesProcessed: 0,
+                        weightProcessed: 0,
+                        actualInput: 0
+                      });
+                      setShowStart(false);
+                    }}
+                    className="px-4 py-2 rounded bg-safi-600 text-white font-medium hover:bg-safi-700 min-h-[44px]"
+                  >
+                    {tEN('Start window', 'Iniciar ventana')}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </>
       );
     }
     return (
-      <div className="bg-white border border-neutral-10 rounded-xl">
-        <div className="px-5 py-4 flex items-center justify-between border-b border-neutral-10">
-          <h3 className="font-semibold text-neutral-100">Active production window</h3>
-          <button className="text-sm font-medium text-neutral-80 hover:text-neutral-100">Finish window</button>
+      <>
+        <div className="bg-white border border-neutral-10 rounded-xl">
+          <div className="px-5 py-4 flex items-center justify-between border-b border-neutral-10">
+            <h3 className="font-semibold text-neutral-100">{tEN('Active production window', 'Ventana de producción activa')}</h3>
+            <button onClick={() => setShowFinish(true)} className="text-sm font-medium text-rose-600 hover:text-rose-700">{tEN('Finish window', 'Finalizar ventana')}</button>
+          </div>
+          <div className="px-5 py-4 grid grid-cols-2 md:grid-cols-6 gap-6 text-sm">
+            <div><div className="text-[13px] text-neutral-60">{tEN('Material', 'Material')}</div><div className="font-semibold text-neutral-100 mt-1">{ACTIVE_WINDOW.material}</div></div>
+            <div><div className="text-[13px] text-neutral-60">{tEN('Target input', 'Objetivo de entrada')}</div><div className="font-semibold text-neutral-100 mt-1">{ACTIVE_WINDOW.targetInput.toFixed(1)}%</div></div>
+            <div><div className="text-[13px] text-neutral-60">{tEN('Elapsed', 'Transcurrido')}</div><div className="font-semibold text-neutral-100 mt-1">{ACTIVE_WINDOW.elapsed}</div></div>
+            <div><div className="text-[13px] text-neutral-60">{tEN('Bales processed', 'Pacas procesadas')}</div><div className="font-semibold text-neutral-100 mt-1">{ACTIVE_WINDOW.balesProcessed}</div></div>
+            <div><div className="text-[13px] text-neutral-60">{tEN('Weight processed', 'Peso procesado')}</div><div className="font-semibold text-neutral-100 mt-1">{fmtKg(ACTIVE_WINDOW.weightProcessed)}</div></div>
+            <div><div className="text-[13px] text-neutral-60">{tEN('Actual input', 'Entrada real')}</div><div className="font-semibold text-emerald-700 mt-1">{ACTIVE_WINDOW.actualInput.toFixed(1)}%</div></div>
+          </div>
         </div>
-        <div className="px-5 py-4 grid grid-cols-2 md:grid-cols-6 gap-6 text-sm">
-          <div><div className="text-[13px] text-neutral-60">Material</div><div className="font-semibold text-neutral-100 mt-1">Clear PET Bottles</div></div>
-          <div><div className="text-[13px] text-neutral-60">Target input</div><div className="font-semibold text-neutral-100 mt-1">{ACTIVE_WINDOW.targetInput.toFixed(1)}%</div></div>
-          <div><div className="text-[13px] text-neutral-60">Elapsed</div><div className="font-semibold text-neutral-100 mt-1">{ACTIVE_WINDOW.elapsed}</div></div>
-          <div><div className="text-[13px] text-neutral-60">Bales processed</div><div className="font-semibold text-neutral-100 mt-1">{ACTIVE_WINDOW.balesProcessed}</div></div>
-          <div><div className="text-[13px] text-neutral-60">Weight processed</div><div className="font-semibold text-neutral-100 mt-1">{fmtKg(ACTIVE_WINDOW.weightProcessed)}</div></div>
-          <div><div className="text-[13px] text-neutral-60">Actual input</div><div className="font-semibold text-emerald-700 mt-1">{ACTIVE_WINDOW.actualInput.toFixed(1)}%</div></div>
-        </div>
-      </div>
+        {showFinish && (
+          <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={() => setShowFinish(false)}>
+            <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6" onClick={e => e.stopPropagation()}>
+              <h3 className="font-bold text-lg text-neutral-100">{tEN('Finish production window?', '¿Finalizar ventana de producción?')}</h3>
+              <p className="text-[13px] text-neutral-60 mt-2">{tEN('This will close the current window and stop tracking. You can start a new one afterwards.', 'Esto cerrará la ventana actual y detendrá el seguimiento. Puedes iniciar una nueva después.')}</p>
+              <div className="mt-6 flex items-center gap-2 justify-end">
+                <button onClick={() => setShowFinish(false)} className="px-4 py-2 rounded border border-neutral-10 text-neutral-80 font-medium hover:bg-neutral-5 min-h-[44px]">
+                  {tEN('Cancel', 'Cancelar')}
+                </button>
+                <button onClick={() => { onFinish(); setShowFinish(false); }} className="px-4 py-2 rounded bg-rose-600 text-white font-medium hover:bg-rose-700 min-h-[44px]">
+                  {tEN('Finish window', 'Finalizar ventana')}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </>
     );
   }
 
