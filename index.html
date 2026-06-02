@@ -1738,6 +1738,7 @@
     errorCircle: ['M22 12a10 10 0 11-20 0 10 10 0 0120 0z', 'M12 8v4', 'M12 16h.01'],
     external: ['M14 3h7v7', 'M10 14L21 3', 'M21 14v5a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h5'],
     print:    ['M6 9V2h12v7', 'M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2', 'M6 14h12v8H6z'],
+    download: ['M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4', 'M7 10l5 5 5-5', 'M12 15V3'],
     calendar: ['M3 8h18', 'M19 4H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2V6a2 2 0 00-2-2z', 'M16 2v4', 'M8 2v4'],
     edit:     ['M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7', 'M18.5 2.5a2.121 2.121 0 113 3L12 15l-4 1 1-4 9.5-9.5z'],
     trash:    ['M3 6h18', 'M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2', 'M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6'],
@@ -4562,6 +4563,8 @@
                 const now = new Date();
                 const dateStr = now.toLocaleDateString(isES ? 'es-ES' : 'en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
                 const timeStr = now.toLocaleTimeString(isES ? 'es-ES' : 'en-GB', { hour: '2-digit', minute: '2-digit' });
+                const siteName = SITES.find(s => s.id === pickingList.site)?.name || pickingList.site || '—';
+                const shiftLabel = pickingList.shift ? (isES ? `Turno ${pickingList.shift}` : `Shift ${pickingList.shift}`) : '—';
                 const rows = [];
                 pickingListSummary.items.forEach(item => {
                   item.loads.forEach(load => {
@@ -4592,10 +4595,10 @@
                   `<div class="hdr"><div><div class="logo">Safi</div><h1 style="margin:4px 0 0;font-size:18px">${isES ? 'Lista de Alimentación a la Banda' : 'Picking List'}</h1></div>` +
                   `<div style="text-align:right;font-size:13px;color:#666">${dateStr}<br/>${timeStr}</div></div>` +
                   `<div class="meta">` +
-                  `<div><dt>${isES ? 'Planta' : 'Plant'}</dt><dd>${pickingList.name?.match(/Planta?\s*\d/i)?.[0] || 'Planta 1'}</dd></div>` +
-                  `<div><dt>${isES ? 'Turno' : 'Shift'}</dt><dd>—</dd></div>` +
-                  `<div><dt>${isES ? 'Creado por' : 'Created by'}</dt><dd>—</dd></div>` +
+                  `<div><dt>${isES ? 'Planta' : 'Site'}</dt><dd>${siteName}</dd></div>` +
+                  `<div><dt>${isES ? 'Turno' : 'Shift'}</dt><dd>${shiftLabel}</dd></div>` +
                   `<div><dt>${isES ? 'Material' : 'Material'}</dt><dd>${pickingListSummary.materials.join(', ')}</dd></div>` +
+                  `<div><dt>${isES ? 'Fecha' : 'Date'}</dt><dd>${dateStr}</dd></div>` +
                   `</div>` +
                   `<div class="summary">` +
                   `<div><div class="n">${pickingListSummary.totalLoads}</div>${isES ? 'Cargas' : 'Loads'}</div>` +
@@ -4623,6 +4626,61 @@
             >
               <Icon d={I.print} className="w-5 h-5" />
               {tEN('Print list', 'Imprimir lista')}
+            </button>
+          )}
+          {pickingList && pickingListSummary && (
+            <button
+              onClick={() => {
+                const isES = lang === 'es';
+                const now = new Date();
+                const dateStr = now.toLocaleDateString(isES ? 'es-ES' : 'en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+                const siteName = SITES.find(s => s.id === pickingList.site)?.name || pickingList.site || '';
+                const shiftLabel = pickingList.shift ? (isES ? `Turno ${pickingList.shift}` : `Shift ${pickingList.shift}`) : '';
+                const esc = (v) => {
+                  const s = String(v ?? '');
+                  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+                };
+                const lines = [];
+                // Metadata header rows
+                lines.push([isES ? 'Planta' : 'Site', siteName].map(esc).join(','));
+                lines.push([isES ? 'Turno' : 'Shift', shiftLabel].map(esc).join(','));
+                lines.push([isES ? 'Fecha' : 'Date', dateStr].map(esc).join(','));
+                lines.push('');
+                // Column headers
+                lines.push([
+                  isES ? 'Zona' : 'Zone',
+                  isES ? 'Fila' : 'Bay',
+                  isES ? 'Proveedor' : 'Supplier',
+                  isES ? 'Lote' : 'Lot',
+                  isES ? 'Material' : 'Material',
+                  isES ? 'Pacas' : 'Bales',
+                  isES ? 'Peso (kg)' : 'Weight (kg)',
+                  isES ? 'Procesado' : 'Processed'
+                ].map(esc).join(','));
+                pickingListSummary.items.forEach(item => {
+                  item.loads.forEach(load => {
+                    const done = !!processed[load.id];
+                    lines.push([
+                      item.zoneId, item.bayId, trSupplier(load.supplier, lang), load.lot,
+                      load.material, load.bales, load.weight, done ? (isES ? 'Sí' : 'Yes') : 'No'
+                    ].map(esc).join(','));
+                  });
+                });
+                const csv = '﻿' + lines.join('\n');
+                const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `picking-list-${pickingList.site || 'site'}-shift${pickingList.shift || ''}-${now.toISOString().slice(0, 10)}.csv`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                setTimeout(() => URL.revokeObjectURL(url), 1000);
+              }}
+              className="inline-flex items-center gap-2 px-4 py-3 rounded-lg border border-neutral-10 bg-white text-neutral-80 hover:bg-neutral-5 min-h-[52px] text-[15px] font-medium"
+            >
+              <Icon d={I.download} className="w-5 h-5" />
+              {tEN('Export CSV', 'Exportar CSV')}
             </button>
           )}
           {anyFilterActive && (
