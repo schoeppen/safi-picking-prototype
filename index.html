@@ -909,6 +909,8 @@
     const [sendModal, setSendModal] = useState(null);
     // Which bay tile (if any) should appear first + highlighted (from the filter or minimap stepper)
     const [focusBayId, setFocusBayId] = useState(null);
+    // Collapsible zones - which zone panels are expanded inline (zoneId -> bool)
+    const [expandedZones, setExpandedZones] = useState({});
     // Per-bay "Show N more suppliers" expander
     const [showAllSuppliers, setShowAllSuppliers] = useState({});
     // R24: yard-overview display mode - 'progress' (fill bar) | 'kpi' (KPI cards) | 'density' (R25 bale-density tiles).
@@ -1204,16 +1206,7 @@
     };
 
     // ---- ZONE VIEW: minimap, zoom, horizontal scrolling bay row ------------
-    const renderZone = () => {
-      const zone = yard.find(z => z.id === view.zoneId);
-      if (!zone) {
-        return (
-          <div className="bg-white border border-neutral-10 rounded-xl p-8 text-center text-[13px] text-neutral-60">
-            Zone not found.
-            <button onClick={goOverview} className="ml-2 text-safi-600 underline">Back to overview</button>
-          </div>
-        );
-      }
+    const renderZoneDetail = (zone) => {
       const maxBalesInZone = Math.max(1, ...zone.bays.map(b => bayStats(b).bales));
       const z = zoneStats(zone);
 
@@ -1233,17 +1226,7 @@
       };
 
       return (
-        <div className="bg-white border border-neutral-10 rounded-xl p-5">
-          <Breadcrumbs zone={zone} />
-
-          {/* Tight yard header: title, single-line metrics, then minimap */}
-          <div className="mt-2 mb-3">
-            <h3 className="text-2xl font-bold text-neutral-100">{zoneName(zone, lang)}</h3>
-            <div className="text-[13px] text-neutral-60 mt-1">
-              {z.bays} {tr('bays', lang).toLowerCase()} · {z.loads} {tr('loads', lang).toLowerCase()} · {fmtNum(z.bales)} {tr('bales', lang).toLowerCase()} · {fmtKg(z.weight)}
-            </div>
-          </div>
-
+        <>
           {/* Directional flow indicator (picking list workflow only) */}
           {isCreating && (
             <div className="flex items-center gap-2 text-[13px] text-neutral-60 mb-2">
@@ -1525,7 +1508,7 @@
               );
             })}
           </div>
-        </div>
+        </>
       );
     };
 
@@ -1665,9 +1648,47 @@
     };
 
     const renderContent = () => {
-      if (view.level === 'zone') return renderZone();
-      if (view.level === 'bay') return renderBay();
-      return renderOverview();
+      const maxBales = Math.max(1, ...yard.map(z => zoneStats(z).bales));
+      return (
+        <div className="space-y-3">
+          {yard.map(zone => {
+            const z = zoneStats(zone);
+            const open = !!expandedZones[zone.id];
+            return (
+              <div key={zone.id} className="bg-white border border-neutral-10 rounded-xl overflow-hidden">
+                <button
+                  onClick={() => setExpandedZones(s => ({ ...s, [zone.id]: !s[zone.id] }))}
+                  className="w-full flex items-center justify-between gap-4 px-5 py-4 hover:bg-neutral-5 text-left"
+                  aria-expanded={open}
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <Icon d={open ? I.chevron : I.chevronR} className="w-5 h-5 text-neutral-60 shrink-0" />
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-bold text-neutral-100 text-xl">{zoneName(zone, lang)}</span>
+                        {zone.inventoryRule && zone.inventoryRule !== 'NONE' && (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-neutral-5 border border-neutral-10 text-[13px] font-semibold text-neutral-80">{zone.inventoryRule}</span>
+                        )}
+                      </div>
+                      <div className="text-[13px] text-neutral-60 mt-0.5">
+                        {z.bays} {tr('bays', lang).toLowerCase()} · {z.loads} {tr('loads', lang).toLowerCase()} · {fmtNum(z.bales)} {tr('bales', lang).toLowerCase()} · {fmtKg(z.weight)}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="hidden md:block flex-1 max-w-[360px]">
+                    <FillBar value={z.bales} max={maxBales} suffix={tr('bales', lang).toLowerCase()} />
+                  </div>
+                </button>
+                {open && (
+                  <div className="border-t border-neutral-10 px-5 py-4">
+                    {renderZoneDetail(zone)}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      );
     };
 
     return (
