@@ -70,7 +70,7 @@
 
   <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.23.5/babel.min.js"></script>
 
   <script type="text/babel" data-presets="env,react">
   /* eslint-disable */
@@ -1161,8 +1161,8 @@
               <Icon d={I.truck} className="w-4 h-4 text-neutral-40" />
               <span>
                 {lang === 'es'
-                  ? 'Recoge de izquierda a derecha, las filas están numeradas en orden de recolección →'
-                  : 'Pick from left to right, bays are numbered in pick order →'}
+                  ? 'Selecciona de izquierda a derecha, las filas están numeradas en orden →'
+                  : 'Select from left to right, bays are numbered in order →'}
               </span>
             </div>
           )}
@@ -1348,8 +1348,8 @@
                             onClick={(e) => e.stopPropagation()}
                             aria-label={`${tr('selectAll', lang)} ${bayName(bay, lang)}`}
                             title={lang === 'es'
-                              ? (allSelected ? 'Eliminar esta fila de la lista' : 'Añadir esta fila a la lista')
-                              : (allSelected ? 'Remove this bay from picking list' : 'Add this whole bay to picking list')}
+                              ? (allSelected ? 'Eliminar esta fila del buffer' : 'Añadir esta fila al buffer')
+                              : (allSelected ? 'Remove this bay from buffer' : 'Add this whole bay to buffer')}
                             className="rounded text-safi-600 focus:ring-safi-500 cursor-pointer w-5 h-5"
                           />
                         )}
@@ -1486,7 +1486,7 @@
             {isCreating && !bay.accessible && (
               <div className="mt-3 inline-flex items-center gap-2 px-3 py-2 rounded bg-amber-50 text-amber-900 text-[13px]">
                 <Icon d={I.lock} className="w-4 h-4" />
-                This bay is blocked by {bay.blockedBy}. Loads here can’t be added to the picking list until the bays in front are cleared.
+                This bay is blocked by {bay.blockedBy}. Loads here can’t be added to the buffer until the bays in front are cleared.
               </div>
             )}
           </div>
@@ -1680,8 +1680,8 @@
               <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[13px] font-medium bg-safi-100 text-safi-700">
                 <Icon d={I.list} className="w-3 h-3" />
                 {typeof onPickingList === 'object' && onPickingList.partial
-                  ? `On picking list (${onPickingList.bales}/${load.bales} bales)`
-                  : 'On picking list'}
+                  ? `In buffer (${onPickingList.bales}/${load.bales} bales)`
+                  : 'In buffer'}
               </span>
             )}
           </div>
@@ -1988,18 +1988,18 @@
                 </button>
                 <span className="text-neutral-40">/</span>
                 <span className="text-neutral-100 font-medium">
-                  {lang === 'es' ? 'Alimentación a la banda' : 'Create picking list'}
+                  {lang === 'es' ? 'Crear buffer' : 'Create buffer'}
                 </span>
               </nav>
               <div className="flex items-start justify-between gap-6">
                 <div>
                   <h1 id="create-picking-list-h1" className="text-3xl font-bold tracking-tight text-neutral-100">
-                    {lang === 'es' ? 'Alimentación a la banda' : 'Create picking list'}
+                    {lang === 'es' ? 'Crear buffer' : 'Create buffer'}
                   </h1>
                   <p className="text-[13px] text-neutral-60 mt-1">
                     {lang === 'es'
-                      ? 'Selecciona los lotes para enviar a los recolectores.'
-                      : 'Select loads below to send to pickers.'}
+                      ? 'Selecciona los lotes para enviar al buffer.'
+                      : 'Select loads below to send to the buffer.'}
                   </p>
                 </div>
               </div>
@@ -2046,7 +2046,7 @@
           {!(slMode === 'create' && tab === 'pw-layout') && (
             <div className="border-b border-neutral-10 mb-6 flex gap-6 text-[13px] overflow-x-auto">
               <Tab id="pw-layout" label={lang === 'es' ? 'Almacén' : 'Warehouse'} tab={tab} setTab={setTab} />
-              <Tab id="picker-merged" label={lang === 'es' ? 'Picking' : 'Picker'}                                    tab={tab} setTab={setTab}
+              <Tab id="picker-merged" label={lang === 'es' ? 'Buffer' : 'Buffer list'}                                    tab={tab} setTab={setTab}
                    badge={pickingList ? loadsRemaining : null} />
               <Tab id="history"   label={lang === 'es' ? 'Historial' : 'History'}                                         tab={tab} setTab={setTab} />
               {/* R29: "Rejected bales" tab removed - rejections now surface inside the History drawer for the relevant production window. */}
@@ -2927,7 +2927,7 @@
       const previousSelection = { ...selectionBales };
       const list = {
         id: 'pl-' + Date.now(),
-        name: `Shift picking list - ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}`,
+        name: `Shift buffer - ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}`,
         createdAt: new Date().toISOString(),
         site: activeSite,
         shift: activeShift,
@@ -2942,7 +2942,7 @@
       // Scroll to top so the user sees the tabs + Picker tab badge
       window.scrollTo({ top: 0, behavior: 'smooth' });
       setToast({
-        message: `Picking list sent to the forklift team. ${list.loads.length} load${list.loads.length === 1 ? '' : 's'} ready to pick.`,
+        message: `Sent to buffer. ${list.loads.length} load${list.loads.length === 1 ? '' : 's'} ready to process.`,
         kind: 'success',
         onUndo: () => {
           setPickingList(null);
@@ -2976,7 +2976,7 @@
               const previous = pickingList;
               setPickingList(null);
               setToast({
-                message: 'Picking list cleared.',
+                message: 'Buffer cleared.',
                 kind: 'success',
                 onUndo: () => setPickingList(previous)
               });
@@ -3048,7 +3048,7 @@
                 className="inline-flex items-center gap-2 px-4 py-2 rounded bg-safi-600 text-white text-sm font-medium hover:bg-safi-700 shadow-sm"
               >
                 <Icon d={I.plus} className="w-4 h-4" />
-                {lang === 'es' ? 'Alimentación a la banda' : 'Create picking list'}
+                {lang === 'es' ? 'Crear buffer' : 'Create buffer'}
               </button>
             )}
           </div>
@@ -3362,11 +3362,11 @@
             <div className="sticky top-[72px] bg-white border border-neutral-10 rounded-xl shadow-sm flex flex-col max-h-[calc(100vh-96px)]">
               <div className="p-5 border-b border-neutral-10 flex items-start justify-between shrink-0">
                 <h2 className="font-bold text-neutral-100 text-lg">
-                  {lang === 'es' ? 'Lista de picking' : 'Picking list'}
+                  {lang === 'es' ? 'Buffer' : 'Buffer list'}
                 </h2>
                 <button
-                  aria-label={lang === 'es' ? 'Imprimir lista' : 'Print picking list'}
-                  title={lang === 'es' ? 'Imprimir lista' : 'Print picking list'}
+                  aria-label={lang === 'es' ? 'Imprimir buffer' : 'Print buffer list'}
+                  title={lang === 'es' ? 'Imprimir buffer' : 'Print buffer list'}
                   className="p-2 rounded-full hover:bg-neutral-5 text-neutral-60 hover:text-neutral-100 min-w-[44px] min-h-[44px]"
                 >
                   <Icon d={I.print} className="w-5 h-5" />
@@ -3435,7 +3435,7 @@
 
                 {summary.loadCount === 0 ? (
                   <div className="text-sm text-neutral-60 bg-neutral-5 border border-neutral-10 rounded-lg p-4">
-                    No loads selected yet. Tick loads in the yard to add them to the picking list.
+                    No loads selected yet. Tick loads in the yard to add them to the buffer.
                   </div>
                 ) : (
                   <>
@@ -3540,7 +3540,7 @@
                           <button
                             onClick={() => setSelectionBales(prev => { const n = { ...prev }; delete n[key]; return n; })}
                             className="p-1.5 text-neutral-60 hover:text-neutral-100 hover:bg-neutral-5 rounded shrink-0"
-                            aria-label={`Remove ${load.lot} from picking list`}
+                            aria-label={`Remove ${load.lot} from buffer`}
                             title="Remove from list"
                           >
                             <Icon d={I.close} className="w-4 h-4" />
@@ -3559,7 +3559,7 @@
                   disabled={summary.loadCount === 0}
                   className="w-full py-2.5 rounded bg-safi-600 text-white font-medium hover:bg-safi-700 disabled:bg-neutral-10 disabled:text-neutral-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
-                  Send to picker
+                  Send to buffer
                   <Icon d={I.arrowR} className="w-4 h-4" />
                 </button>
                 <div className="flex items-center gap-2">
@@ -3611,9 +3611,9 @@
           <div className="flex items-start gap-3">
             <Icon d={I.info} className="w-5 h-5 text-sky-700 mt-0.5" />
             <div>
-              <div className="font-bold text-sky-900">Picking list is active</div>
+              <div className="font-bold text-sky-900">Buffer list is active</div>
               <p className="text-sm text-sky-800 mt-0.5">
-                {pickingList.loads.length} loads sent to the forklift team. Edit the list to change it, or clear it to start a new one.
+                {pickingList.loads.length} loads sent to the buffer. Edit it to change it, or clear it to start a new one.
               </p>
             </div>
           </div>
@@ -3797,9 +3797,9 @@
           <div className="mx-auto w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 mb-3">
             <Icon d={I.list} className="w-6 h-6" />
           </div>
-          <h3 className="font-semibold text-slate-900 text-lg">No picking list yet</h3>
+          <h3 className="font-semibold text-slate-900 text-lg">No buffer yet</h3>
           <p className="text-sm text-slate-500 mt-1 max-w-md mx-auto">
-            The shift leader hasn't sent a picking list. When they do, the loads you need to move will appear here, grouped by zone.
+            The shift leader hasn't sent anything to the buffer. When they do, the loads you need to process will appear here, grouped by zone.
           </p>
           <button
             onClick={() => setRole('SL')}
@@ -3855,8 +3855,8 @@
             <div className="font-semibold text-slate-900">{pickingList.name}</div>
             <p className="text-sm text-slate-700 mt-0.5">
               {allDone
-                ? 'All loads on this picking list have been processed. Confirm with the Shift Leader to close out the shift.'
-                : `${doneLoads} of ${totalLoads} loads processed. Pick from the bays below in any order - full load by default, or specify bales if the load is split.`}
+                ? 'All loads in this buffer have been processed. Confirm with the Shift Leader to close out the shift.'
+                : `${doneLoads} of ${totalLoads} loads processed. Process from the bays below in any order - full load by default, or specify bales if the load is split.`}
             </p>
           </div>
           {allDone && (
@@ -3864,7 +3864,7 @@
               onClick={() => setPickingList(null)}
               className="px-4 py-2 rounded-lg bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700"
             >
-              Close picking list
+              Close buffer
             </button>
           )}
         </div>
@@ -4379,7 +4379,7 @@
               </div>
               <div className="flex-1 min-w-0 text-left">
                 <div className="font-semibold text-neutral-100 text-base">
-                  {tEN('Picking list', 'Lista de picking')}
+                  {tEN('Buffer list', 'Buffer')}
                   <span className="text-neutral-60 font-normal"> · {pickingList.name}</span>
                 </div>
                 <div className="text-[13px] text-neutral-60 mt-0.5">
@@ -4552,8 +4552,8 @@
             >
               <Icon d={pickingListOnly ? I.check : I.list} className="w-5 h-5" />
               {pickingListOnly
-                ? tEN('Showing picking list only', 'Mostrando solo lista')
-                : tEN('Show picking list only', 'Mostrar solo lista')}
+                ? tEN('Showing buffer only', 'Mostrando solo buffer')
+                : tEN('Show buffer only', 'Mostrar solo buffer')}
             </button>
           )}
           {pickingList && pickingListSummary && (
@@ -4583,7 +4583,7 @@
                     );
                   });
                 });
-                const html = `<!DOCTYPE html><html><head><title>${isES ? 'Lista de Picking' : 'Picking List'}</title>` +
+                const html = `<!DOCTYPE html><html><head><title>${isES ? 'Buffer' : 'Buffer List'}</title>` +
                   `<style>@media print{body{margin:0}}.page{font-family:system-ui,sans-serif;padding:32px;max-width:900px;margin:auto}` +
                   `table{width:100%;border-collapse:collapse;font-size:13px}th{background:#f5f5f5;font-weight:600;text-align:left;padding:8px 10px;border:1px solid #ddd}` +
                   `.hdr{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px}` +
@@ -4592,7 +4592,7 @@
                   `.summary{display:flex;gap:24px;font-size:14px;margin-bottom:20px}.summary div{}.summary .n{font-size:22px;font-weight:700}` +
                   `.logo{font-size:20px;font-weight:700;color:#6347FF}</style></head>` +
                   `<body><div class="page">` +
-                  `<div class="hdr"><div><div class="logo">Safi</div><h1 style="margin:4px 0 0;font-size:18px">${isES ? 'Lista de Alimentación a la Banda' : 'Picking List'}</h1></div>` +
+                  `<div class="hdr"><div><div class="logo">Safi</div><h1 style="margin:4px 0 0;font-size:18px">${isES ? 'Buffer' : 'Buffer List'}</h1></div>` +
                   `<div style="text-align:right;font-size:13px;color:#666">${dateStr}<br/>${timeStr}</div></div>` +
                   `<div class="meta">` +
                   `<div><dt>${isES ? 'Planta' : 'Site'}</dt><dd>${siteName}</dd></div>` +
@@ -4666,12 +4666,12 @@
                     ].map(esc).join(','));
                   });
                 });
-                const csv = '﻿' + lines.join('\n');
+                const csv = '\uFEFF' + lines.join('\n');
                 const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.href = url;
-                a.download = `picking-list-${pickingList.site || 'site'}-shift${pickingList.shift || ''}-${now.toISOString().slice(0, 10)}.csv`;
+                a.download = `buffer-${pickingList.site || 'site'}-shift${pickingList.shift || ''}-${now.toISOString().slice(0, 10)}.csv`;
                 document.body.appendChild(a);
                 a.click();
                 document.body.removeChild(a);
@@ -4823,7 +4823,7 @@
                                       {onList && (
                                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-safi-100 text-safi-700 text-[13px] font-medium whitespace-nowrap">
                                           <Icon d={I.list} className="w-3.5 h-3.5" />
-                                          {tEN('On picking list', 'En lista de picking')}
+                                          {tEN('In buffer', 'En buffer')}
                                         </span>
                                       )}
                                       {/* R25: "Accessible (N bales)" chip removed. Accessibility is now implicit -
@@ -5353,7 +5353,7 @@
               {onPickingList && (
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-safi-100 text-safi-700 text-[13px] font-medium">
                   <Icon d={I.list} className="w-3.5 h-3.5" />
-                  {tEN('On picking list', 'En lista de picking')}
+                  {tEN('In buffer', 'En buffer')}
                 </span>
               )}
               {isSplit && (
