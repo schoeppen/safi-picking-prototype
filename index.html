@@ -473,6 +473,10 @@
     { id: 'apan2', name: 'Apan 2', esName: 'Apan 2' }
   ];
 
+  // Production lines material can be fed to from the buffer.
+  const LINES = [1, 2, 3];
+  const lineName = (n, lang) => lang === 'es' ? `Línea ${n}` : `Line ${n}`;
+
   const SITE_WINDOWS = {
     apan1: {
       material: 'Clear PET Bottles',
@@ -818,9 +822,10 @@
   // ============================================================================
   // Stepper popup for sending a load's bales to the buffer.
   // Typable centre value with -3/-2/-1 and +1/+2/+3 quick-adjust buttons.
-  function BufferStepperModal({ zone, bay, load, lang = 'en', existingBales, onCancel, onConfirm }) {
+  function BufferStepperModal({ zone, bay, load, lang = 'en', existingBales, existingLine, onCancel, onConfirm }) {
     const max = load.bales;
     const [val, setVal] = useState(existingBales != null ? existingBales : max);
+    const [line, setLine] = useState(existingLine || 1);
     const clamp = (n) => Math.max(0, Math.min(max, n));
     const step = (delta) => setVal(v => clamp((Number(v) || 0) + delta));
     const tEN = (en, es) => lang === 'es' ? es : en;
@@ -865,18 +870,32 @@
             <button onClick={() => setVal(max)} className="px-3 py-1 rounded-full border border-neutral-10 text-neutral-60 hover:bg-neutral-5">{tEN('Max', 'Máx')} ({max})</button>
           </div>
 
+          {/* Production line to feed */}
+          <div className="mt-5">
+            <label className="block text-[13px] font-medium text-neutral-60 mb-1">{tEN('Send to production line', 'Enviar a la línea de producción')}</label>
+            <select
+              value={line}
+              onChange={(e) => setLine(Number(e.target.value))}
+              className="w-full border border-neutral-10 rounded-lg px-3 py-2.5 text-[15px] font-medium text-neutral-100 bg-white focus:border-safi-600 focus:outline-none"
+            >
+              {LINES.map(n => (
+                <option key={n} value={n}>{lineName(n, lang)}</option>
+              ))}
+            </select>
+          </div>
+
           <div className="mt-6 flex items-center gap-2 justify-end">
             <button onClick={onCancel} className="px-4 py-2 rounded-lg border border-neutral-10 text-neutral-80 font-medium hover:bg-neutral-5 min-h-[44px]">
               {tEN('Cancel', 'Cancelar')}
             </button>
             <button
-              onClick={() => onConfirm(clamp(Number(val) || 0))}
+              onClick={() => onConfirm(clamp(Number(val) || 0), line)}
               disabled={(Number(val) || 0) <= 0}
               className="px-4 py-2 rounded-lg bg-safi-600 text-white font-medium hover:bg-safi-700 disabled:bg-neutral-10 disabled:text-neutral-40 disabled:cursor-not-allowed min-h-[44px]"
             >
               {existingBales != null
-                ? tEN(`Update to ${clamp(Number(val) || 0)} bales`, `Actualizar a ${clamp(Number(val) || 0)} pacas`)
-                : tEN(`Send ${clamp(Number(val) || 0)} bales`, `Enviar ${clamp(Number(val) || 0)} pacas`)}
+                ? tEN(`Update · ${lineName(line, lang)}`, `Actualizar · ${lineName(line, lang)}`)
+                : tEN(`Send ${clamp(Number(val) || 0)} → ${lineName(line, lang)}`, `Enviar ${clamp(Number(val) || 0)} → ${lineName(line, lang)}`)}
             </button>
           </div>
         </div>
@@ -1661,9 +1680,10 @@
             load={sendModal.load}
             lang={lang}
             existingBales={(pickingList?.loads || []).find(l => l.zoneId === sendModal.zone.id && l.bayId === sendModal.bay.id && l.loadId === sendModal.load.id)?.bales}
+            existingLine={(pickingList?.loads || []).find(l => l.zoneId === sendModal.zone.id && l.bayId === sendModal.bay.id && l.loadId === sendModal.load.id)?.line}
             onCancel={() => setSendModal(null)}
-            onConfirm={(bales) => {
-              onSendToBuffer?.(sendModal.zone.id, sendModal.bay.id, sendModal.load.id, bales, sendModal.load.supplier, sendModal.load.lot);
+            onConfirm={(bales, line) => {
+              onSendToBuffer?.(sendModal.zone.id, sendModal.bay.id, sendModal.load.id, bales, sendModal.load.supplier, sendModal.load.lot, line);
               setSendModal(null);
             }}
           />
@@ -3013,7 +3033,7 @@
 
     // Always-active buffer: send N bales of a specific load straight to the buffer
     // for the current site + shift. New loads queue at the bottom (top = processed first).
-    const sendToBuffer = (zoneId, bayId, loadId, bales, supplier, lot) => {
+    const sendToBuffer = (zoneId, bayId, loadId, bales, supplier, lot, line = 1) => {
       setPickingList(prev => {
         const base = prev || {
           id: 'pl-' + Date.now(),
@@ -3027,15 +3047,16 @@
         const existing = loads.find(l => l.zoneId === zoneId && l.bayId === bayId && l.loadId === loadId);
         if (existing) {
           existing.bales = bales; // update quantity for an already-queued load
+          existing.line = line;   // and its target line
         } else {
-          loads.push({ zoneId, bayId, loadId, bales });
+          loads.push({ zoneId, bayId, loadId, bales, line });
         }
         return { ...base, loads };
       });
       setToast?.({
         message: lang === 'es'
-          ? `${bales} paca${bales === 1 ? '' : 's'} de ${trSupplier(supplier || '', lang)} ${lot ? '· ' + lot : ''} enviadas al buffer`
-          : `${bales} bale${bales === 1 ? '' : 's'} from ${supplier || ''} ${lot ? '· ' + lot : ''} sent to buffer`,
+          ? `${bales} paca${bales === 1 ? '' : 's'} de ${trSupplier(supplier || '', lang)} → ${lineName(line, lang)}`
+          : `${bales} bale${bales === 1 ? '' : 's'} from ${supplier || ''} → ${lineName(line, lang)}`,
         kind: 'success'
       });
     };
@@ -4342,6 +4363,18 @@
       return { items, totalLoads, totalBales, totalWeight, materials: Array.from(materials) };
     }, [pickingList]);
 
+    // Buffer grouped by production line - bales queued per line (uses sent bales).
+    const bufferByLine = useMemo(() => {
+      const map = {};
+      (pickingList?.loads || []).forEach(item => {
+        const line = item.line || 1;
+        if (!map[line]) map[line] = { line, bales: 0, loads: 0 };
+        map[line].bales += item.bales || 0;
+        map[line].loads += 1;
+      });
+      return Object.values(map).sort((a, b) => a.line - b.line);
+    }, [pickingList]);
+
     // Build the filter option list once
     const bayOptions = useMemo(() => {
       const out = [];
@@ -4486,6 +4519,29 @@
             </div>
           );
         })()}
+
+        {/* Buffer: bales queued per production line */}
+        {pickingList && bufferByLine.length > 0 && (
+          <div className="rounded-xl bg-white border border-neutral-10 p-4">
+            <div className="text-[13px] font-semibold uppercase tracking-wide text-neutral-60 mb-3">
+              {tEN('Buffer · bales per line', 'Buffer · pacas por línea')}
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              {LINES.map(n => {
+                const row = bufferByLine.find(r => r.line === n);
+                const bales = row?.bales || 0;
+                const active = bales > 0;
+                return (
+                  <div key={n} className={'rounded-lg border p-3 text-center ' + (active ? 'border-safi-300 bg-safi-50/60' : 'border-neutral-10 bg-neutral-5/40')}>
+                    <div className={'text-[13px] font-semibold ' + (active ? 'text-safi-700' : 'text-neutral-80')}>{lineName(n, lang)}</div>
+                    <div className={'text-2xl font-bold mt-1 ' + (active ? 'text-neutral-100' : 'text-neutral-40')}>{bales}</div>
+                    <div className="text-[12px] text-neutral-60">{tEN('bales', 'pacas')}</div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
         {/* R26/R31: Picking list summary - rendered ABOVE the buffer in bale-based mode.
             In load-based mode the FO works whole loads, so the summary card is hidden -
             picking-list bays are still highlighted in the main list below for context. */}
