@@ -2114,34 +2114,11 @@
             </div>
           ) : (
             <div className="mb-4">
-              <div className="flex items-center justify-between gap-4 flex-wrap">
-                <h1 className="text-3xl font-bold tracking-tight text-neutral-100">
-                  {lang === 'es' ? 'Producción' : 'Production'}
-                </h1>
-                <div className="flex items-center gap-3">
-                  {/* Site selector */}
-                  <span className="text-[13px] font-semibold uppercase tracking-wide text-neutral-50">{lang === 'es' ? 'Planta' : 'Site'}</span>
-                  <div className="flex items-center bg-neutral-5 rounded-xl p-1 border border-neutral-10 shadow-sm">
-                    {SITES.map(site => (
-                      <button
-                        key={site.id}
-                        onClick={() => setActiveSite(site.id)}
-                        className={
-                          'flex items-center gap-2 px-5 py-2.5 rounded-lg text-[15px] font-semibold transition-all ' +
-                          (activeSite === site.id
-                            ? 'bg-safi-600 text-white shadow-sm'
-                            : 'text-neutral-60 hover:text-neutral-100 hover:bg-white')
-                        }
-                      >
-                        <Icon d={I.factory} className="w-4 h-4" />
-                        {site.name}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
+              <h1 className="text-3xl font-bold tracking-tight text-neutral-100">
+                {lang === 'es' ? 'Producción' : 'Production'}
+              </h1>
               <p className="text-[13px] text-neutral-50 mt-1">
-                {SITES.find(s => s.id === activeSite)?.name} · {new Date().toLocaleDateString(lang === 'es' ? 'es-ES' : 'en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
+                {new Date().toLocaleDateString(lang === 'es' ? 'es-ES' : 'en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
               </p>
             </div>
           )}
