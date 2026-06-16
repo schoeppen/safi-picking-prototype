@@ -4375,6 +4375,21 @@
       return Object.values(map).sort((a, b) => a.line - b.line);
     }, [pickingList]);
 
+    // Buffer loads resolved to YARD objects, grouped by production line.
+    const bufferLoadsByLine = useMemo(() => {
+      const map = {};
+      (pickingList?.loads || []).forEach(item => {
+        const zone = YARD.find(z => z.id === item.zoneId);
+        const bay = zone?.bays.find(b => b.id === item.bayId);
+        const load = bay?.loads.find(l => l.id === item.loadId);
+        if (!zone || !bay || !load) return;
+        const line = item.line || 1;
+        if (!map[line]) map[line] = [];
+        map[line].push({ zone, bay, load, bales: item.bales });
+      });
+      return map;
+    }, [pickingList, activeSite]);
+
     // Build the filter option list once
     const bayOptions = useMemo(() => {
       const out = [];
@@ -4699,41 +4714,8 @@
           </div>
         ))}
 
-        {/* Filter row - Bay + Material multi-select + picking-list toggle */}
-        <div className="flex flex-wrap items-center gap-3">
-          <PickerFilterDropdown
-            label={tEN('Bays', 'Filas')}
-            value={bayFilter}
-            onChange={setBayFilter}
-            options={bayOptions}
-            placeholder={tEN('All bays', 'Todas las filas')}
-            lang={lang}
-          />
-          <PickerFilterDropdown
-            label={tEN('Material', 'Material')}
-            value={materialFilter}
-            onChange={setMaterialFilter}
-            options={materialOptions}
-            placeholder={tEN('All materials', 'Todos los materiales')}
-            lang={lang}
-          />
-          {pickingList && (
-            <button
-              onClick={() => setPickingListOnly(v => !v)}
-              className={
-                'inline-flex items-center gap-2 px-4 py-3 rounded-lg border min-h-[52px] text-[15px] font-medium ' +
-                (pickingListOnly
-                  ? 'border-safi-600 bg-safi-50 text-safi-700'
-                  : 'border-neutral-10 bg-white text-neutral-80 hover:bg-neutral-5')
-              }
-              aria-pressed={pickingListOnly}
-            >
-              <Icon d={pickingListOnly ? I.check : I.list} className="w-5 h-5" />
-              {pickingListOnly
-                ? tEN('Showing buffer only', 'Mostrando solo buffer')
-                : tEN('Show buffer only', 'Mostrar solo buffer')}
-            </button>
-          )}
+        {/* Buffer actions - print / export */}
+        <div className="flex flex-wrap items-center justify-end gap-2">
           {pickingList && pickingListSummary && (
             <button
               onClick={() => {
@@ -4861,18 +4843,67 @@
               {tEN('Export CSV', 'Exportar CSV')}
             </button>
           )}
-          {anyFilterActive && (
-            <button
-              onClick={clearAllFilters}
-              className="inline-flex items-center px-4 py-3 rounded-lg text-safi-700 text-[15px] font-medium hover:underline min-h-[52px]"
-            >
-              {tEN('Clear filters', 'Borrar filtros')}
-            </button>
-          )}
         </div>
 
-        {/* Zones / bays */}
+        {/* Buffer contents grouped by production line - only what is in the buffer */}
         <div className="space-y-3">
+          {(!pickingList || pickingList.loads.length === 0) ? (
+            <div className="rounded-xl bg-white border border-neutral-10 px-5 py-12 text-center">
+              <div className="text-[15px] font-medium text-neutral-100">{tEN('Buffer is empty', 'El buffer está vacío')}</div>
+              <p className="text-[13px] text-neutral-60 mt-1">{tEN('Send loads to the buffer from the Warehouse tab.', 'Envía lotes al buffer desde la pestaña Almacén.')}</p>
+            </div>
+          ) : (
+            LINES.filter(n => (bufferLoadsByLine[n] || []).length > 0).map(n => {
+              const entries = bufferLoadsByLine[n];
+              const lineBales = entries.reduce((a, e) => a + e.bales, 0);
+              return (
+                <div key={n} className="bg-white border border-neutral-10 rounded-xl overflow-hidden">
+                  <div className="px-5 py-3 border-b border-neutral-10 bg-safi-50/40 flex items-center justify-between">
+                    <span className="font-semibold text-safi-700">{lineName(n, lang)}</span>
+                    <span className="text-[13px] text-neutral-60">{lineBales} {tEN('bales', 'pacas')} · {entries.length} {entries.length === 1 ? tEN('load', 'lote') : tEN('loads', 'lotes')}</span>
+                  </div>
+                  <ul className="divide-y divide-neutral-10">
+                    {entries.map(({ zone, bay, load, bales }) => {
+                      const weight = Math.round(bales * (load.weight / load.bales));
+                      return (
+                        <li key={`${zone.id}|${bay.id}|${load.id}`} className="px-5 py-3 flex items-center gap-3 flex-wrap">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="font-medium text-neutral-100">{trSupplier(load.supplier, lang)}</span>
+                              <span className="text-[13px] text-neutral-40">#{load.lot}</span>
+                              <AIResultChips load={load} />
+                            </div>
+                            <div className="text-[13px] text-neutral-60 mt-0.5">
+                              {zoneName(zone, lang)} · {bayName(bay, lang)} · <span className="font-medium text-neutral-100">{bales}</span> {tEN('bales', 'pacas')} · {fmtKg(weight)}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <button
+                              onClick={() => setModal({ type: 'reject', source: 'load', zone, bay, load, accessibleBales: bales })}
+                              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-rose-200 text-rose-700 text-[13px] font-medium hover:bg-rose-50 min-h-[40px]"
+                            >
+                              <Icon d={I.trash} className="w-4 h-4" />
+                              {tEN('Reject', 'Rechazar')}
+                            </button>
+                            <button
+                              onClick={() => setModal({ type: 'process', source: 'load', zone, bay, load, accessibleBales: bales })}
+                              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-safi-600 text-white text-[13px] font-medium hover:bg-safi-700 min-h-[40px]"
+                            >
+                              {tEN('Process', 'Procesar')}
+                              <Icon d={I.arrowR} className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              );
+            })
+          )}
+        </div>
+        {/* legacy zone rendering removed - buffer view shows only buffered loads */}
+        <div className="hidden">
           {visibleZones.length === 0 && (
             <div className="rounded-xl bg-white border border-neutral-10 px-5 py-10 text-center">
               <div className="text-[15px] font-medium text-neutral-100">
