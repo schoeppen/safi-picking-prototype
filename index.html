@@ -816,8 +816,78 @@
   //           single horizontal row, with a heat-mapped minimap above.
   // Bay view:  full load list (LoadRow re-used).
   // ============================================================================
-  function SpatialLayoutView({ yard, isCreating, selectionBales, setSelectionBales, pickingList, lang = 'en', bayFilter, setSlMode, pickerMode = 'load', setToast }) {
+  // Stepper popup for sending a load's bales to the buffer.
+  // Typable centre value with -3/-2/-1 and +1/+2/+3 quick-adjust buttons.
+  function BufferStepperModal({ zone, bay, load, lang = 'en', existingBales, onCancel, onConfirm }) {
+    const max = load.bales;
+    const [val, setVal] = useState(existingBales != null ? existingBales : max);
+    const clamp = (n) => Math.max(0, Math.min(max, n));
+    const step = (delta) => setVal(v => clamp((Number(v) || 0) + delta));
+    const tEN = (en, es) => lang === 'es' ? es : en;
+    const adj = [-3, -2, -1, 1, 2, 3];
+    return (
+      <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={onCancel}>
+        <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6" onClick={e => e.stopPropagation()}>
+          <h3 className="font-bold text-lg text-neutral-100">{tEN('Send to buffer', 'Enviar al buffer')}</h3>
+          <p className="text-[13px] text-neutral-60 mt-1">
+            {zoneName(zone, lang)} · {bayName(bay, lang)} · <span className="font-medium text-neutral-100">{trSupplier(load.supplier, lang)}</span> <span className="font-mono">#{load.lot}</span>
+          </p>
+          <p className="text-[12px] text-neutral-50 mt-1">{tEN('Top load — first to be processed.', 'Carga superior — primera en procesarse.')} {tEN('Bales available', 'Pacas disponibles')}: {max}</p>
+
+          <div className="mt-5 flex items-center justify-center gap-2">
+            {adj.filter(d => d < 0).map(d => {
+              const disabled = (Number(val) || 0) + d < 0;
+              return (
+                <button key={d} onClick={() => step(d)} disabled={disabled}
+                  className={'w-12 h-12 rounded-lg border text-[15px] font-semibold ' + (disabled ? 'border-neutral-10 text-neutral-30' : 'border-neutral-10 text-neutral-100 hover:bg-neutral-5')}>
+                  {d}
+                </button>
+              );
+            })}
+            <input
+              type="number" min={0} max={max} value={val}
+              onChange={(e) => setVal(clamp(Number(e.target.value)))}
+              className="w-20 h-14 text-center text-2xl font-bold text-neutral-100 border-2 border-neutral-10 rounded-lg focus:border-safi-600 focus:outline-none"
+            />
+            {adj.filter(d => d > 0).map(d => {
+              const disabled = (Number(val) || 0) + d > max;
+              return (
+                <button key={d} onClick={() => step(d)} disabled={disabled}
+                  className={'w-12 h-12 rounded-lg border text-[15px] font-semibold ' + (disabled ? 'border-neutral-10 text-neutral-30' : 'border-neutral-10 text-neutral-100 hover:bg-neutral-5')}>
+                  +{d}
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="mt-3 flex items-center justify-center gap-2 text-[13px]">
+            <button onClick={() => setVal(0)} className="px-3 py-1 rounded-full border border-neutral-10 text-neutral-60 hover:bg-neutral-5">0</button>
+            <button onClick={() => setVal(max)} className="px-3 py-1 rounded-full border border-neutral-10 text-neutral-60 hover:bg-neutral-5">{tEN('Max', 'Máx')} ({max})</button>
+          </div>
+
+          <div className="mt-6 flex items-center gap-2 justify-end">
+            <button onClick={onCancel} className="px-4 py-2 rounded-lg border border-neutral-10 text-neutral-80 font-medium hover:bg-neutral-5 min-h-[44px]">
+              {tEN('Cancel', 'Cancelar')}
+            </button>
+            <button
+              onClick={() => onConfirm(clamp(Number(val) || 0))}
+              disabled={(Number(val) || 0) <= 0}
+              className="px-4 py-2 rounded-lg bg-safi-600 text-white font-medium hover:bg-safi-700 disabled:bg-neutral-10 disabled:text-neutral-40 disabled:cursor-not-allowed min-h-[44px]"
+            >
+              {existingBales != null
+                ? tEN(`Update to ${clamp(Number(val) || 0)} bales`, `Actualizar a ${clamp(Number(val) || 0)} pacas`)
+                : tEN(`Send ${clamp(Number(val) || 0)} bales`, `Enviar ${clamp(Number(val) || 0)} pacas`)}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  function SpatialLayoutView({ yard, isCreating, selectionBales, setSelectionBales, pickingList, lang = 'en', bayFilter, setSlMode, pickerMode = 'load', setToast, onSendToBuffer }) {
     const [view, setView] = useState({ level: 'overview' });
+    // Always-active buffer: tapping a bay opens this stepper to send its top load. { zone, bay, load } | null
+    const [sendModal, setSendModal] = useState(null);
     // Which bay tile (if any) should appear first + highlighted (from the filter or minimap stepper)
     const [focusBayId, setFocusBayId] = useState(null);
     // Per-bay "Show N more suppliers" expander
@@ -1323,7 +1393,11 @@
                   }
                 >
                   <button
-                    onClick={() => goBay(zone.id, bay.id)}
+                    onClick={() => {
+                      // Tap a bay -> send its TOP load (first to be processed) to the buffer.
+                      if (empty || !bay.accessible || bay.loads.length === 0) return;
+                      setSendModal({ zone, bay, load: bay.loads[0] });
+                    }}
                     className="w-full text-left p-3 focus:outline-none focus:ring-2 focus:ring-safi-600 rounded-lg"
                   >
                     <div className="flex items-start justify-between gap-2">
@@ -1580,6 +1654,20 @@
     return (
       <>
         {renderContent()}
+        {sendModal && (
+          <BufferStepperModal
+            zone={sendModal.zone}
+            bay={sendModal.bay}
+            load={sendModal.load}
+            lang={lang}
+            existingBales={(pickingList?.loads || []).find(l => l.zoneId === sendModal.zone.id && l.bayId === sendModal.bay.id && l.loadId === sendModal.load.id)?.bales}
+            onCancel={() => setSendModal(null)}
+            onConfirm={(bales) => {
+              onSendToBuffer?.(sendModal.zone.id, sendModal.bay.id, sendModal.load.id, bales, sendModal.load.supplier, sendModal.load.lot);
+              setSendModal(null);
+            }}
+          />
+        )}
         {rejectModal && (
           <RejectMaterialModal
             source="load"
@@ -2923,6 +3011,35 @@
       }, 80);
     };
 
+    // Always-active buffer: send N bales of a specific load straight to the buffer
+    // for the current site + shift. New loads queue at the bottom (top = processed first).
+    const sendToBuffer = (zoneId, bayId, loadId, bales, supplier, lot) => {
+      setPickingList(prev => {
+        const base = prev || {
+          id: 'pl-' + Date.now(),
+          name: `Shift buffer - ${new Date().toLocaleDateString()}`,
+          createdAt: new Date().toISOString(),
+          site: activeSite,
+          shift: activeShift,
+          loads: []
+        };
+        const loads = [...base.loads];
+        const existing = loads.find(l => l.zoneId === zoneId && l.bayId === bayId && l.loadId === loadId);
+        if (existing) {
+          existing.bales = bales; // update quantity for an already-queued load
+        } else {
+          loads.push({ zoneId, bayId, loadId, bales });
+        }
+        return { ...base, loads };
+      });
+      setToast?.({
+        message: lang === 'es'
+          ? `${bales} paca${bales === 1 ? '' : 's'} de ${trSupplier(supplier || '', lang)} ${lot ? '· ' + lot : ''} enviadas al buffer`
+          : `${bales} bale${bales === 1 ? '' : 's'} from ${supplier || ''} ${lot ? '· ' + lot : ''} sent to buffer`,
+        kind: 'success'
+      });
+    };
+
     const confirmList = () => {
       const previousSelection = { ...selectionBales };
       const list = {
@@ -3042,15 +3159,19 @@
             </div>
             <ZoneBayFilter value={bayFilter} onChange={setBayFilter} yard={visibleYard} lang={lang} />
             <div className="flex-1" />
-            {!isCreating && !pickingList && (
-              <button
-                onClick={() => setSlMode('create')}
-                className="inline-flex items-center gap-2 px-4 py-2 rounded bg-safi-600 text-white text-sm font-medium hover:bg-safi-700 shadow-sm"
+            {/* Buffer shift target - the buffer is always active; new sends go to this shift */}
+            <div className="flex items-center gap-2">
+              <span className="text-[13px] font-medium text-neutral-60">{lang === 'es' ? 'Turno del buffer' : 'Buffer shift'}</span>
+              <select
+                value={activeShift}
+                onChange={(e) => setActiveShift(Number(e.target.value))}
+                className="border border-neutral-10 rounded-md px-2 py-2 text-sm text-neutral-100 bg-white focus:border-safi-600"
               >
-                <Icon d={I.plus} className="w-4 h-4" />
-                {lang === 'es' ? 'Crear buffer' : 'Create buffer'}
-              </button>
-            )}
+                {[1, 2, 3].map(s => (
+                  <option key={s} value={s}>{lang === 'es' ? `Turno ${s}` : `Shift ${s}`}</option>
+                ))}
+              </select>
+            </div>
           </div>
         </div>{/* /sticky warehouse header */}
 
@@ -3069,6 +3190,7 @@
               setSlMode={setSlMode}
               pickerMode={pickerMode}
               setToast={setToast}
+              onSendToBuffer={sendToBuffer}
             />
           ) : (
           /* Yard - Zones / Bays / Loads */
