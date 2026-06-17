@@ -474,7 +474,7 @@
   ];
 
   // Production lines material can be fed to from the buffer.
-  const LINES = [1, 2, 3];
+  const LINES = [1, 2];
   const lineName = (n, lang) => lang === 'es' ? `Línea ${n}` : `Line ${n}`;
 
   const SITE_WINDOWS = {
@@ -820,6 +820,71 @@
   //           single horizontal row, with a heat-mapped minimap above.
   // Bay view:  full load list (LoadRow re-used).
   // ============================================================================
+  // Process the bales on a line one at a time, capturing each bale's weight.
+  function ProcessBalesModal({ line, totalBales, lang = 'en', onCancel, onComplete }) {
+    const tEN = (en, es) => lang === 'es' ? es : en;
+    const [weights, setWeights] = useState([]);
+    const [val, setVal] = useState('');
+    const idx = weights.length;            // 0-based index of the bale being weighed now
+    const isLast = idx === totalBales - 1;
+    const recordedWeight = weights.reduce((a, b) => a + b, 0);
+    const record = () => {
+      const w = Number(val);
+      if (!w || w <= 0) return;
+      const next = [...weights, Math.round(w)];
+      setVal('');
+      if (next.length >= totalBales) {
+        onComplete(next);
+      } else {
+        setWeights(next);
+      }
+    };
+    return (
+      <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={onCancel}>
+        <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6" onClick={e => e.stopPropagation()}>
+          <h3 className="font-bold text-lg text-neutral-100">{tEN('Process bales', 'Procesar pacas')} · {lineName(line, lang)}</h3>
+          {/* Progress */}
+          <div className="mt-1 flex items-center justify-between text-[13px] text-neutral-60">
+            <span>{tEN(`Bale ${idx + 1} of ${totalBales}`, `Paca ${idx + 1} de ${totalBales}`)}</span>
+            <span>{weights.length} {tEN('done', 'hechas')} · {fmtKg(recordedWeight)}</span>
+          </div>
+          <div className="mt-2 h-1.5 bg-neutral-5 rounded-full overflow-hidden">
+            <div className="h-full bg-safi-600 transition-all" style={{ width: `${Math.round((weights.length / totalBales) * 100)}%` }} />
+          </div>
+
+          <div className="mt-5">
+            <label className="block text-[13px] font-medium text-neutral-60 mb-1">
+              {tEN(`Weight of bale ${idx + 1}`, `Peso de la paca ${idx + 1}`)}
+            </label>
+            <div className="flex items-center gap-2">
+              <input
+                type="number" min={0} autoFocus value={val}
+                onChange={(e) => setVal(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); record(); } }}
+                placeholder="0"
+                className="flex-1 h-14 text-center text-2xl font-bold text-neutral-100 border-2 border-neutral-10 rounded-lg focus:border-safi-600 focus:outline-none"
+              />
+              <span className="text-[15px] font-medium text-neutral-60">kg</span>
+            </div>
+          </div>
+
+          <div className="mt-6 flex items-center gap-2 justify-end">
+            <button onClick={onCancel} className="px-4 py-2 rounded-lg border border-neutral-10 text-neutral-80 font-medium hover:bg-neutral-5 min-h-[44px]">
+              {tEN('Cancel', 'Cancelar')}
+            </button>
+            <button
+              onClick={record}
+              disabled={!(Number(val) > 0)}
+              className="px-4 py-2 rounded-lg bg-safi-600 text-white font-medium hover:bg-safi-700 disabled:bg-neutral-10 disabled:text-neutral-40 disabled:cursor-not-allowed min-h-[44px]"
+            >
+              {isLast ? tEN('Record & finish', 'Registrar y finalizar') : tEN('Record & next bale', 'Registrar y siguiente')}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // Stepper popup for sending a load's bales to the buffer.
   // Typable centre value with -3/-2/-1 and +1/+2/+3 quick-adjust buttons.
   function BufferStepperModal({ zone, bay, load, lang = 'en', existingBales, existingLine, onCancel, onConfirm }) {
@@ -870,34 +935,38 @@
             <button onClick={() => setVal(max)} className="px-3 py-1 rounded-full border border-neutral-10 text-neutral-60 hover:bg-neutral-5">{tEN('Max', 'Máx')} ({max})</button>
           </div>
 
-          {/* Production line to feed */}
+          {/* Production line - one big button per line */}
           <div className="mt-5">
-            <label className="block text-[13px] font-medium text-neutral-60 mb-1">{tEN('Send to production line', 'Enviar a la línea de producción')}</label>
-            <select
-              value={line}
-              onChange={(e) => setLine(Number(e.target.value))}
-              className="w-full border border-neutral-10 rounded-lg px-3 py-2.5 text-[15px] font-medium text-neutral-100 bg-white focus:border-safi-600 focus:outline-none"
-            >
-              {LINES.map(n => (
-                <option key={n} value={n}>{lineName(n, lang)}</option>
-              ))}
-            </select>
+            <label className="block text-[13px] font-medium text-neutral-60 mb-2">{tEN('Send to production line', 'Enviar a la línea de producción')}</label>
+            <div className="grid grid-cols-2 gap-3">
+              {LINES.map(n => {
+                const active = line === n;
+                return (
+                  <button
+                    key={n}
+                    onClick={() => setLine(n)}
+                    className={
+                      'py-4 rounded-xl border-2 text-[17px] font-bold transition-all ' +
+                      (active
+                        ? 'border-safi-600 bg-safi-600 text-white shadow-sm'
+                        : 'border-neutral-10 bg-white text-neutral-80 hover:border-safi-300')
+                    }
+                  >
+                    {lineName(n, lang)}
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
-          <div className="mt-6 flex items-center gap-2 justify-end">
-            <button onClick={onCancel} className="px-4 py-2 rounded-lg border border-neutral-10 text-neutral-80 font-medium hover:bg-neutral-5 min-h-[44px]">
-              {tEN('Cancel', 'Cancelar')}
-            </button>
-            <button
-              onClick={() => onConfirm(clamp(Number(val) || 0), line)}
-              disabled={(Number(val) || 0) <= 0}
-              className="px-4 py-2 rounded-lg bg-safi-600 text-white font-medium hover:bg-safi-700 disabled:bg-neutral-10 disabled:text-neutral-40 disabled:cursor-not-allowed min-h-[44px]"
-            >
-              {existingBales != null
-                ? tEN(`Update · ${lineName(line, lang)}`, `Actualizar · ${lineName(line, lang)}`)
-                : tEN(`Send ${clamp(Number(val) || 0)} → ${lineName(line, lang)}`, `Enviar ${clamp(Number(val) || 0)} → ${lineName(line, lang)}`)}
-            </button>
-          </div>
+          {/* Single send button below */}
+          <button
+            onClick={() => onConfirm(clamp(Number(val) || 0), line)}
+            disabled={(Number(val) || 0) <= 0}
+            className="mt-5 w-full py-3.5 rounded-xl bg-safi-600 text-white text-[16px] font-semibold hover:bg-safi-700 disabled:bg-neutral-10 disabled:text-neutral-40 disabled:cursor-not-allowed"
+          >
+            {tEN(`Send ${clamp(Number(val) || 0)} bales to buffer`, `Enviar ${clamp(Number(val) || 0)} pacas al buffer`)}
+          </button>
         </div>
       </div>
     );
@@ -3081,27 +3150,32 @@
 
     // Process every load queued on a line: record it as processed and clear it
     // from the buffer.
+    // Bale-by-bale processing: clicking "Process bales" opens a modal that steps
+    // through each bale on the line asking for its weight.
+    const [processModal, setProcessModal] = useState(null); // { line, totalBales } | null
     const processLine = (line) => {
       const row = bufferLines.find(l => l.line === line);
-      if (!row) return;
-      row.items.forEach(({ load, bales }) => {
-        const perBale = load.weight / load.bales;
-        const pid = `line-${line}-${load.id}-${bales}`;
-        setProcessed(prev => ({
-          ...prev,
-          [pid]: { bales, weight: Math.round(bales * perBale), at: new Date().toISOString(), partial: bales < load.bales, line }
-        }));
-      });
+      if (!row || row.bales <= 0) return;
+      setProcessModal({ line, totalBales: row.bales });
+    };
+    const completeProcessLine = (line, weights) => {
+      const totalWeight = weights.reduce((a, b) => a + b, 0);
+      const pid = `line-${line}-${new Date().toISOString()}`;
+      setProcessed(prev => ({
+        ...prev,
+        [pid]: { bales: weights.length, weight: Math.round(totalWeight), at: new Date().toISOString(), partial: true, line, baleWeights: weights }
+      }));
       setPickingList(prev => {
         if (!prev) return prev;
         const remaining = prev.loads.filter(l => (l.line || 1) !== line);
         if (remaining.length === 0) return null;
         return { ...prev, loads: remaining };
       });
+      setProcessModal(null);
       setToast?.({
         message: lang === 'es'
-          ? `Procesadas ${row.bales} pacas en ${lineName(line, lang)} (${fmtKg(row.weight)})`
-          : `Processed ${row.bales} bales on ${lineName(line, lang)} (${fmtKg(row.weight)})`,
+          ? `Procesadas ${weights.length} pacas en ${lineName(line, lang)} (${fmtKg(Math.round(totalWeight))})`
+          : `Processed ${weights.length} bales on ${lineName(line, lang)} (${fmtKg(Math.round(totalWeight))})`,
         kind: 'success'
       });
     };
@@ -3188,6 +3262,17 @@
               ))}
             </div>
           </div>
+        )}
+
+        {/* Bale-by-bale process modal */}
+        {processModal && (
+          <ProcessBalesModal
+            line={processModal.line}
+            totalBales={processModal.totalBales}
+            lang={lang}
+            onCancel={() => setProcessModal(null)}
+            onComplete={(weights) => completeProcessLine(processModal.line, weights)}
+          />
         )}
 
         {/* Warehouse header - outside the grid so both columns align with the first zone card. */}
