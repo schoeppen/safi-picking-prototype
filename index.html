@@ -2149,8 +2149,6 @@
           {!(slMode === 'create' && tab === 'pw-layout') && (
             <div className="border-b border-neutral-10 mb-6 flex gap-6 text-[13px] overflow-x-auto">
               <Tab id="pw-layout" label={lang === 'es' ? 'Almacén' : 'Warehouse'} tab={tab} setTab={setTab} />
-              <Tab id="picker-merged" label={lang === 'es' ? 'Buffer' : 'Buffer list'}                                    tab={tab} setTab={setTab}
-                   badge={pickingList ? loadsRemaining : null} />
               <Tab id="history"   label={lang === 'es' ? 'Historial' : 'History'}                                         tab={tab} setTab={setTab} />
               {/* R29: "Rejected bales" tab removed - rejections now surface inside the History drawer for the relevant production window. */}
             </div>
@@ -2165,10 +2163,9 @@
                                     setToast={setToast} processed={processed} lang={lang}
                                     selectionBales={selectionBales} setSelectionBales={setSelectionBales}
                                     pickerMode={pickerMode}
+                                    setProcessed={setProcessed}
                                     activeSite={activeSite} activeShift={activeShift} setActiveShift={setActiveShift} sitePickingLists={sitePickingLists} />}
-          {/* tab === 'picker' (original load-only Picker) is no longer routed - ForkliftPickerView retained in source */}
-          {tab === 'picker-merged' && <ForkliftPickerMergedView pickingList={pickingList} setPickingList={setPickingList} processed={processed}
-                                  setProcessed={setProcessed} lang={lang} setToast={setToast} bufferEnabled={bufferEnabled} pickerMode={pickerMode} activeSite={activeSite} activeShift={activeShift} />}
+          {/* Buffer list tab removed - buffer now lives on the Warehouse page */}
           {tab === 'history' && <HistoryView processed={processed} pickerMode={pickerMode} lang={lang} />}
         </div>
 
@@ -2893,7 +2890,7 @@
   // SHIFT LEADER VIEW - progressive disclosure + picking-list creation
   // ============================================================================
 
-  function ShiftLeaderView({ layout = 'accordion', pickingList, setPickingList, setTab, setRole, slMode, setSlMode, windowActive, startWindow = () => {}, finishWindow = () => {}, setToast, processed = {}, lang = 'en', selectionBales, setSelectionBales, pickerMode = 'load', activeSite = 'apan1', activeShift = 1, setActiveShift = () => {}, sitePickingLists = {} }) {
+  function ShiftLeaderView({ layout = 'accordion', pickingList, setPickingList, setTab, setRole, slMode, setSlMode, windowActive, startWindow = () => {}, finishWindow = () => {}, setToast, processed = {}, setProcessed = () => {}, lang = 'en', selectionBales, setSelectionBales, pickerMode = 'load', activeSite = 'apan1', activeShift = 1, setActiveShift = () => {}, sitePickingLists = {} }) {
     const isCreating = slMode === 'create';
     const isSticky = layout === 'sticky';
     const isSpatial = layout === 'spatial';
@@ -3056,6 +3053,59 @@
       });
     };
 
+    // Buffer grouped by production line: bales, total weight, weighted-avg target
+    // material (Transparent PET %), and the underlying buffer items.
+    const bufferLines = useMemo(() => {
+      const map = {};
+      (pickingList?.loads || []).forEach(item => {
+        const zone = (typeof YARD !== 'undefined' ? YARD : []).find(z => z.id === item.zoneId);
+        const bay = zone?.bays.find(b => b.id === item.bayId);
+        const load = bay?.loads.find(l => l.id === item.loadId);
+        if (!load) return;
+        const line = item.line || 1;
+        const perBale = load.weight / load.bales;
+        const weight = Math.round((item.bales || 0) * perBale);
+        if (!map[line]) map[line] = { line, bales: 0, weight: 0, qSum: 0, qWeight: 0, items: [] };
+        map[line].bales += item.bales || 0;
+        map[line].weight += weight;
+        if (load.results) {
+          map[line].qSum += load.results.transparentPET * weight;
+          map[line].qWeight += weight;
+        }
+        map[line].items.push({ zone, bay, load, bales: item.bales });
+      });
+      return Object.values(map)
+        .map(l => ({ ...l, avgQuality: l.qWeight > 0 ? l.qSum / l.qWeight : null }))
+        .sort((a, b) => a.line - b.line);
+    }, [pickingList]);
+
+    // Process every load queued on a line: record it as processed and clear it
+    // from the buffer.
+    const processLine = (line) => {
+      const row = bufferLines.find(l => l.line === line);
+      if (!row) return;
+      row.items.forEach(({ load, bales }) => {
+        const perBale = load.weight / load.bales;
+        const pid = `line-${line}-${load.id}-${bales}`;
+        setProcessed(prev => ({
+          ...prev,
+          [pid]: { bales, weight: Math.round(bales * perBale), at: new Date().toISOString(), partial: bales < load.bales, line }
+        }));
+      });
+      setPickingList(prev => {
+        if (!prev) return prev;
+        const remaining = prev.loads.filter(l => (l.line || 1) !== line);
+        if (remaining.length === 0) return null;
+        return { ...prev, loads: remaining };
+      });
+      setToast?.({
+        message: lang === 'es'
+          ? `Procesadas ${row.bales} pacas en ${lineName(line, lang)} (${fmtKg(row.weight)})`
+          : `Processed ${row.bales} bales on ${lineName(line, lang)} (${fmtKg(row.weight)})`,
+        kind: 'success'
+      });
+    };
+
     const confirmList = () => {
       const previousSelection = { ...selectionBales };
       const list = {
@@ -3090,31 +3140,54 @@
         {/* Active production window - hidden during Create picking list */}
         {!isCreating && <ActiveProductionWindow active={windowActive} onStart={startWindow} onFinish={finishWindow} lang={lang} />}
 
-        {/* Existing-list banner - blue info style with Edit / destructive Clear */}
-        {!isCreating && pickingList && (
-          <ActivePickingListAlert
-            pickingList={pickingList}
-            onEdit={() => {
-              // Pre-populate the create workflow with the active list but DO NOT
-              // clear pickingList yet - so if the SL cancels mid-edit, the existing
-              // active picking list is still in place.
-              const next = {};
-              pickingList.loads.forEach(l => {
-                next[`${l.zoneId}|${l.bayId}|${l.loadId}`] = l.bales != null ? l.bales : findLoadByKey(`${l.zoneId}|${l.bayId}|${l.loadId}`)?.bales ?? 0;
-              });
-              setSelectionBales(next);
-              setSlMode('create');
-            }}
-            onClear={() => {
-              const previous = pickingList;
-              setPickingList(null);
-              setToast({
-                message: 'Buffer cleared.',
-                kind: 'success',
-                onUndo: () => setPickingList(previous)
-              });
-            }}
-          />
+        {/* Buffer panel - bales per production line, live as loads are sent.
+            Shows total weight + avg target material, and a per-line Process action. */}
+        {!isCreating && bufferLines.length > 0 && (
+          <div className="rounded-xl bg-white border border-neutral-10 p-4">
+            <div className="flex items-center justify-between mb-3">
+              <div className="text-[13px] font-semibold uppercase tracking-wide text-neutral-60">
+                {lang === 'es' ? 'Buffer · pacas por línea' : 'Buffer · bales per line'}
+              </div>
+              <button
+                onClick={() => {
+                  const previous = pickingList;
+                  setPickingList(null);
+                  setToast?.({ message: lang === 'es' ? 'Buffer vaciado.' : 'Buffer cleared.', kind: 'success', onUndo: () => setPickingList(previous) });
+                }}
+                className="text-[13px] font-medium text-rose-600 hover:underline"
+              >
+                {lang === 'es' ? 'Vaciar buffer' : 'Clear buffer'}
+              </button>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {bufferLines.map(l => (
+                <div key={l.line} className="rounded-lg border border-safi-300 bg-safi-50/60 p-4 flex flex-col">
+                  <div className="text-center">
+                    <div className="text-[13px] font-semibold text-safi-700">{lineName(l.line, lang)}</div>
+                    <div className="text-3xl font-bold text-neutral-100 mt-1">{l.bales}</div>
+                    <div className="text-[12px] text-neutral-60">{lang === 'es' ? 'pacas' : 'bales'}</div>
+                  </div>
+                  <div className="mt-3 grid grid-cols-2 gap-2 text-center border-t border-safi-200/60 pt-3">
+                    <div>
+                      <div className="text-[11px] text-neutral-60 uppercase tracking-wide font-medium">{lang === 'es' ? 'Peso' : 'Weight'}</div>
+                      <div className="text-[15px] font-semibold text-neutral-100 mt-0.5">{fmtKg(l.weight)}</div>
+                    </div>
+                    <div>
+                      <div className="text-[11px] text-neutral-60 uppercase tracking-wide font-medium">{lang === 'es' ? 'Material obj.' : 'Target material'}</div>
+                      <div className="text-[15px] font-semibold text-neutral-100 mt-0.5">{l.avgQuality != null ? `${l.avgQuality.toFixed(1)}%` : '—'}</div>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => processLine(l.line)}
+                    className="mt-3 w-full inline-flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-lg bg-safi-600 text-white text-[13px] font-semibold hover:bg-safi-700"
+                  >
+                    {lang === 'es' ? 'Procesar pacas' : 'Process bales'}
+                    <Icon d={I.arrowR} className="w-4 h-4" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
         )}
 
         {/* Warehouse header - outside the grid so both columns align with the first zone card. */}
