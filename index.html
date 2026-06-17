@@ -2148,7 +2148,7 @@
               load-based and bale-based flows via the header Picker mode toggle. */}
           {!(slMode === 'create' && tab === 'pw-layout') && (
             <div className="border-b border-neutral-10 mb-6 flex gap-6 text-[13px] overflow-x-auto">
-              <Tab id="pw-layout" label={lang === 'es' ? 'Almacén' : 'Warehouse'} tab={tab} setTab={setTab} />
+              <Tab id="pw-layout" label={lang === 'es' ? 'Operaciones de montacargas' : 'Fork lift operations'} tab={tab} setTab={setTab} />
               <Tab id="history"   label={lang === 'es' ? 'Historial' : 'History'}                                         tab={tab} setTab={setTab} />
               {/* R29: "Rejected bales" tab removed - rejections now surface inside the History drawer for the relevant production window. */}
             </div>
