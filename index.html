@@ -3248,19 +3248,6 @@
             </div>
             <ZoneBayFilter value={bayFilter} onChange={setBayFilter} yard={visibleYard} lang={lang} />
             <div className="flex-1" />
-            {/* Buffer shift target - the buffer is always active; new sends go to this shift */}
-            <div className="flex items-center gap-2">
-              <span className="text-[13px] font-medium text-neutral-60">{lang === 'es' ? 'Turno del buffer' : 'Buffer shift'}</span>
-              <select
-                value={activeShift}
-                onChange={(e) => setActiveShift(Number(e.target.value))}
-                className="border border-neutral-10 rounded-md px-2 py-2 text-sm text-neutral-100 bg-white focus:border-safi-600"
-              >
-                {[1, 2, 3].map(s => (
-                  <option key={s} value={s}>{lang === 'es' ? `Turno ${s}` : `Shift ${s}`}</option>
-                ))}
-              </select>
-            </div>
           </div>
         </div>{/* /sticky warehouse header */}
 
